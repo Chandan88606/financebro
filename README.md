@@ -37,30 +37,36 @@ FinanceBro is an institutional-grade algorithmic technical analysis consensus en
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Decoupled Technology Stack
 
-- **Frontend**: Streamlit (Sleek dark-mode dashboard)
-- **Charting**: TradingView Widget & Plotly
-- **Data & Computations**: Python 3, Pandas, NumPy, yfinance, ta
+FinanceBro features a decoupled client-server architecture:
+- **Frontend**: **React 18 + Vite** with Glassmorphic Financial Terminal CSS, TradingView Candlestick Charts, and Lucide icons (deployable to **Cloudflare Pages**).
+- **Backend**: **FastAPI + Uvicorn** with asynchronous REST endpoints & real-time **WebSockets** feed.
+- **Data Engine**: Python 3, Pandas, NumPy, yfinance, ta.
 
 ---
 
 ## 🏃 Getting Started
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Chandan88606/FinanceBro.git
-   cd FinanceBro
-   ```
+### 1. Run the FastAPI Backend (Port 8000)
+```bash
+cd backend
+pip install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+- Interactive Swagger API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- WebSocket feed: `ws://localhost:8000/ws/feed`
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Run the React Frontend (Port 3000)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+- Open your browser at [http://localhost:3000](http://localhost:3000)
 
-3. **Run the application**:
-   ```bash
-   streamlit run app.py
-   ```
-
-4. Open your browser at `http://localhost:8501`.
+### 3. Deploy Frontend to Cloudflare Pages (`financebro-8c3.pages.dev`)
+- **Build command**: `npm run build`
+- **Output directory**: `dist`
+- **Root directory**: `frontend`
+- Set `VITE_API_URL` to your live FastAPI backend domain.
