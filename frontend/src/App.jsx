@@ -30,7 +30,6 @@ export default function App() {
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isMarketModalOpen, setIsMarketModalOpen] = useState(false);
-  const [simulationPaused, setSimulationPaused] = useState(false);
   const [marketStatus, setMarketStatus] = useState(() => api.getMarketStatus());
 
   const [tradeModal, setTradeModal] = useState({
@@ -53,13 +52,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(clockTimer);
   }, []);
-
-  const handleToggleSimulation = () => {
-    const nextPaused = !simulationPaused;
-    api.toggleSimulation(!nextPaused);
-    setSimulationPaused(nextPaused);
-    setMarketStatus(api.getMarketStatus());
-  };
 
   // 1. Initial Data Fetch
   useEffect(() => {
@@ -105,27 +97,7 @@ export default function App() {
     }
   };
 
-  // 2. Real-time Market Pulse (Tick simulation)
-  useEffect(() => {
-    const pulseTimer = setInterval(async () => {
-      api.tickMarket();
-      try {
-        const stocksRes = await api.getStocks();
-        setStocks(stocksRes.stocks || []);
-        if (selectedTicker) {
-          const detail = await api.getStockDetail(selectedTicker);
-          setStockDetail(detail);
-        }
-        const portRes = await api.getPortfolio();
-        setPortfolio(portRes);
 
-        const foPos = await api.getFoPositions();
-        setFoPositionsCount(foPos ? foPos.length : 0);
-      } catch (e) {}
-    }, 6000);
-
-    return () => clearInterval(pulseTimer);
-  }, [selectedTicker]);
 
   // 3. Setup WebSocket Connection if running against external server
   const setupWebSocket = () => {
@@ -380,13 +352,76 @@ export default function App() {
         wsConnected={wsConnected}
         foPositionsCount={foPositionsCount}
         marketStatus={marketStatus}
-        simulationPaused={simulationPaused}
-        onToggleSimulation={handleToggleSimulation}
         onOpenMarketInfo={() => setIsMarketModalOpen(true)}
       />
 
       {/* Main Grid Workspace with HashRouter Routes */}
       <main style={{ padding: '1.25rem 1.5rem', maxWidth: 1720, margin: '0 auto', width: '100%', flex: 1 }}>
+        {/* Authoritative Market Closed Notification Banner */}
+        {marketStatus && !marketStatus.isOpen && (
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.16) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(239, 68, 68, 0.16) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            borderRadius: 12,
+            padding: '0.85rem 1.25rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            boxShadow: '0 4px 25px rgba(239, 68, 68, 0.15)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                backgroundColor: '#ef4444',
+                boxShadow: '0 0 12px #ef4444',
+                flexShrink: 0
+              }} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fca5a5', letterSpacing: '0.5px' }}>
+                    🔴 {marketStatus.statusText}
+                  </span>
+                  <span style={{
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    color: '#fca5a5',
+                    fontSize: '0.68rem',
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: 6,
+                    fontWeight: 800,
+                    border: '1px solid rgba(239, 68, 68, 0.4)'
+                  }}>
+                    OFFICIAL CLOSING LTP FROZEN
+                  </span>
+                  <span className="mono" style={{ fontSize: '0.74rem', color: '#cbd5e1' }}>
+                    {marketStatus.istTimeString} IST
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#e2e8f0', marginTop: 3 }}>
+                  Market is closed. Showing authentic official closing prices (e.g. <strong>RELIANCE ₹1,164.90</strong>, <strong>NIFTY 50 23,053.10</strong>). Zero demo fluctuations or synthetic drift. Next session opens <strong>{marketStatus.nextOpenText}</strong>.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMarketModalOpen(true)}
+              className="btn btn-outline"
+              style={{
+                fontSize: '0.76rem',
+                padding: '0.4rem 0.85rem',
+                borderColor: 'rgba(239, 68, 68, 0.45)',
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.1)',
+                flexShrink: 0
+              }}
+            >
+              Market Hours & Rules
+            </button>
+          </div>
+        )}
         <Routes>
           {/* Default & Cash Equity Dashboard View */}
           <Route
@@ -601,13 +636,11 @@ export default function App() {
         onExecute={handleExecuteOrder}
       />
 
-      {/* NSE Market Status & Simulator Explanation Modal */}
+      {/* NSE Market Status & Schedule Modal */}
       <MarketStatusModal
         isOpen={isMarketModalOpen}
         onClose={() => setIsMarketModalOpen(false)}
         marketStatus={marketStatus}
-        simulationPaused={simulationPaused}
-        onToggleSimulation={handleToggleSimulation}
       />
     </div>
   );

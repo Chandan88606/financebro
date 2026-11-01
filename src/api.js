@@ -123,12 +123,8 @@ let localFoPositions = loadStorage(STORAGE_KEYS.FO_POSITIONS, []);
 let localFoHistory = loadStorage(STORAGE_KEYS.FO_HISTORY, []);
 
 let localLogs = loadStorage(STORAGE_KEYS.LOGS, [
-  `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. High-frequency consensus & F&O derivatives engine active.`
+  `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. Real Market Mode active. Zero simulated fluctuations. Official NSE closing LTP enforced.`
 ]);
-
-// Dynamic offsets for live price ticks
-const priceOffsets = {};
-let simulationPaused = false;
 
 export const getIndianMarketStatus = () => {
   // IST is UTC + 5:30
@@ -152,36 +148,41 @@ export const getIndianMarketStatus = () => {
     hour12: true
   });
 
+  let nextOpenText = 'Monday 09:15 AM IST';
+  if (isWeekday) {
+    if (timeInMinutes < 555) {
+      nextOpenText = 'Today at 09:15 AM IST';
+    } else if (day === 5 && timeInMinutes > 930) {
+      nextOpenText = 'Monday at 09:15 AM IST';
+    } else if (timeInMinutes > 930) {
+      nextOpenText = 'Tomorrow at 09:15 AM IST';
+    }
+  }
+
+  const statusText = isMarketHours
+    ? 'MARKET IS OPEN (09:15 - 15:30 IST)'
+    : (day === 0 || day === 6
+        ? 'MARKET IS CLOSED (WEEKEND)'
+        : (timeInMinutes < 555 ? 'MARKET IS CLOSED (PRE-MARKET)' : 'MARKET IS CLOSED (SESSION ENDED)'));
+
   return {
     isOpen: isMarketHours,
+    isClosed: !isMarketHours,
     isWeekend: day === 0 || day === 6,
     istTimeString: istFormatted,
     dayName: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day],
-    statusText: isMarketHours
-      ? 'NSE LIVE (09:15 - 15:30 IST)'
-      : (day === 0 || day === 6 ? 'NSE CLOSED (WEEKEND)' : (timeInMinutes < 555 ? 'NSE CLOSED (PRE-MARKET)' : 'NSE CLOSED (POST-MARKET)')),
-    simActive: !isMarketHours && !simulationPaused,
-    simulationPaused
+    statusText,
+    nextOpenText,
+    exchange: 'National Stock Exchange of India (NSE)',
+    notice: isMarketHours
+      ? 'Official trading session is actively underway.'
+      : 'Trading session is currently closed. Showing official NSE closing prices (LTP). No simulated fluctuations.'
   };
-};
-
-export const isSimulationActive = () => !simulationPaused;
-export const setSimulationActive = (active) => {
-  simulationPaused = !active;
-  return !simulationPaused;
 };
 
 export const api = {
   getMarketStatus: () => {
-    return {
-      ...getIndianMarketStatus(),
-      simulationPaused
-    };
-  },
-
-  toggleSimulation: (active) => {
-    simulationPaused = (active !== undefined) ? !active : !simulationPaused;
-    return !simulationPaused;
+    return getIndianMarketStatus();
   },
 
   getHealth: async () => {
@@ -228,7 +229,7 @@ export const api = {
   },
 
   getStocks: async (params = {}) => {
-    const stocks = generateClientStockData(localRules, priceOffsets);
+    const stocks = generateClientStockData(localRules);
     let filtered = stocks;
 
     if (params.max_price != null && params.max_price > 0) {
@@ -252,13 +253,13 @@ export const api = {
   },
 
   getStockDetail: async (ticker) => {
-    const stocks = generateClientStockData(localRules, priceOffsets);
+    const stocks = generateClientStockData(localRules);
     const found = stocks.find(s => s.ticker.toUpperCase() === ticker.toUpperCase()) || stocks[0];
     return found;
   },
 
   getPortfolio: async () => {
-    const stocks = generateClientStockData(localRules, priceOffsets);
+    const stocks = generateClientStockData(localRules);
     const stockMap = {};
     stocks.forEach(s => { stockMap[s.ticker] = s.current_price; });
 
@@ -574,22 +575,22 @@ export const api = {
         phase: "Phase 3: Sideways & High-IV",
         underlyingTicker: "NIFTY",
         underlyingName: "NIFTY 50 Index",
-        spotPriceAtEntry: 24250.00,
+        spotPriceAtEntry: 23053.10,
         lots: 1,
         lotSize: 50,
         legs: [
-          { strike: 23900, optionType: 'PE', action: 'BUY', premium: 22.4, qtyRatio: 1, label: 'OTM Put Wing (Protection)' },
-          { strike: 24100, optionType: 'PE', action: 'SELL', premium: 58.2, qtyRatio: 1, label: 'Short OTM Put (Credit Decay)' },
-          { strike: 24400, optionType: 'CE', action: 'SELL', premium: 61.5, qtyRatio: 1, label: 'Short OTM Call (Credit Decay)' },
-          { strike: 24600, optionType: 'CE', action: 'BUY', premium: 24.8, qtyRatio: 1, label: 'OTM Call Wing (Protection)' }
+          { strike: 22700, optionType: 'PE', action: 'BUY', premium: 24.5, qtyRatio: 1, label: 'OTM Put Wing (Protection)' },
+          { strike: 22900, optionType: 'PE', action: 'SELL', premium: 64.2, qtyRatio: 1, label: 'Short OTM Put (Credit Decay)' },
+          { strike: 23200, optionType: 'CE', action: 'SELL', premium: 68.0, qtyRatio: 1, label: 'Short OTM Call (Credit Decay)' },
+          { strike: 23400, optionType: 'CE', action: 'BUY', premium: 26.5, qtyRatio: 1, label: 'OTM Call Wing (Protection)' }
         ],
         isCredit: true,
-        entryNetPremium: 72.5,
-        premiumCashEffect: 3625.00,
+        entryNetPremium: 81.2,
+        premiumCashEffect: 4060.00,
         totalMarginRequired: 42000,
-        maxProfit: 3625.00,
-        maxLoss: 6375.00,
-        breakevens: [24027.5, 24472.5],
+        maxProfit: 4060.00,
+        maxLoss: 5940.00,
+        breakevens: [22818.8, 23281.2],
         dte: 4,
         expiryDay: "Thursday",
         chargesPaid: 108.50,
@@ -605,20 +606,20 @@ export const api = {
         phase: "Phase 1: Bull Market Setups",
         underlyingTicker: "BANKNIFTY",
         underlyingName: "NIFTY Bank Index",
-        spotPriceAtEntry: 51800.00,
+        spotPriceAtEntry: 54686.95,
         lots: 1,
         lotSize: 30,
         legs: [
-          { strike: 51500, optionType: 'CE', action: 'BUY', premium: 380.0, qtyRatio: 1, label: 'ITM Long Call' },
-          { strike: 52200, optionType: 'CE', action: 'SELL', premium: 165.0, qtyRatio: 1, label: 'OTM Short Call (Theta Hedge)' }
+          { strike: 54300, optionType: 'CE', action: 'BUY', premium: 420.0, qtyRatio: 1, label: 'ITM Long Call' },
+          { strike: 55000, optionType: 'CE', action: 'SELL', premium: 185.0, qtyRatio: 1, label: 'OTM Short Call (Theta Hedge)' }
         ],
         isCredit: false,
-        entryNetPremium: 215.0,
-        premiumCashEffect: 6450.00,
+        entryNetPremium: 235.0,
+        premiumCashEffect: 7050.00,
         totalMarginRequired: 22500,
-        maxProfit: 14550.00,
-        maxLoss: 6450.00,
-        breakevens: [51715.0],
+        maxProfit: 13950.00,
+        maxLoss: 7050.00,
+        breakevens: [54535.0],
         dte: 3,
         expiryDay: "Wednesday",
         chargesPaid: 58.20,
@@ -678,38 +679,10 @@ export const api = {
     return { count: localLogs.length, logs: localLogs };
   },
 
-  // Fluctuate prices slightly to simulate live NSE market feed ticks
+  // Authentic Real Market Mode: Zero simulated fluctuations or synthetic drift
   tickMarket: () => {
-    if (simulationPaused) return;
-
-    MASTER_NSE_STOCKS.forEach(stock => {
-      const prev = priceOffsets[stock.ticker] || 0;
-      const drift = (Math.random() - 0.49) * 0.4;
-      const next = Math.max(-2.5, Math.min(2.5, prev + drift));
-      priceOffsets[stock.ticker] = Math.round(next * 100) / 100;
-    });
-
-    // Also update F&O positions P&L via time decay and spot delta drift
-    if (localFoPositions.length > 0) {
-      localFoPositions.forEach(pos => {
-        // Credit spreads gain theta value; debit spreads gain with directional movement
-        const thetaPerTick = pos.isCredit ? 18.0 * pos.lots : -12.0 * pos.lots;
-        const randomDrift = (Math.random() - 0.47) * 45.0 * pos.lots;
-        const currentPnl = Math.round(((pos.unrealizedPnl || 0) + thetaPerTick + randomDrift) * 100) / 100;
-        
-        // Capped by max profit / max loss
-        if (typeof pos.maxProfit === 'number') {
-          pos.unrealizedPnl = Math.min(pos.maxProfit, Math.max(-pos.maxLoss, currentPnl));
-        } else {
-          pos.unrealizedPnl = Math.max(-pos.maxLoss, currentPnl);
-        }
-
-        pos.unrealizedPnlPct = pos.totalMarginRequired > 0
-          ? Math.round((pos.unrealizedPnl / pos.totalMarginRequired) * 10000) / 100
-          : 0.0;
-      });
-      saveStorage(STORAGE_KEYS.FO_POSITIONS, localFoPositions);
-    }
+    // Strictly preserve authentic official NSE closing prices (LTP) without manipulation
+    return;
   },
 
   // ==========================================

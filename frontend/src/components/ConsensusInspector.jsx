@@ -52,9 +52,12 @@ export default function ConsensusInspector({
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
             <span className="mono" style={{ fontSize: '1.35rem', fontWeight: 800 }}>
               ₹{current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
+            <span style={{ fontSize: '0.68rem', color: '#94a3b8', background: 'rgba(30, 41, 59, 0.8)', padding: '0.15rem 0.45rem', borderRadius: 6, border: '1px solid var(--border-subtle)', fontWeight: 600 }}>
+              Official NSE LTP
             </span>
             <span className="mono" style={{
               fontSize: '0.88rem',

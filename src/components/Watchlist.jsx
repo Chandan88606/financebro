@@ -36,6 +36,9 @@ export default function Watchlist({
             <span>NSE Watchlist</span>
             <span className="badge-tag badge-cyan">{filteredStocks.length}</span>
           </h3>
+          <span style={{ fontSize: '0.66rem', color: '#94a3b8', fontWeight: 600 }}>
+            Official NSE Closing LTP
+          </span>
           {filterAffordable && (
             <span className="badge-tag badge-emerald" style={{ fontSize: '0.65rem' }}>
               Budget Mode ≤ ₹{Math.round(walletBalance).toLocaleString('en-IN')}

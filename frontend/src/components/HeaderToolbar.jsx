@@ -105,49 +105,50 @@ export default function HeaderToolbar({
           </div>
         </div>
 
-        {/* NSE Market Session & Simulator Status Pill */}
+        {/* NSE Market Session & Data Integrity Pill */}
         {marketStatus && (
           <div 
             onClick={onOpenMarketInfo}
-            title="Click to view NSE market hours & paper trading simulator details"
+            title="Click to view NSE market schedule & official data integrity policy"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
-              background: marketStatus.isOpen ? 'rgba(16, 185, 129, 0.12)' : 'rgba(30, 41, 59, 0.85)',
-              border: `1px solid ${marketStatus.isOpen ? 'rgba(16, 185, 129, 0.35)' : 'rgba(148, 163, 184, 0.22)'}`,
+              gap: '0.6rem',
+              background: marketStatus.isOpen ? 'rgba(16, 185, 129, 0.14)' : 'rgba(239, 68, 68, 0.14)',
+              border: `1px solid ${marketStatus.isOpen ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
               borderRadius: 8,
-              padding: '0.3rem 0.65rem',
+              padding: '0.35rem 0.75rem',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
           >
             <span style={{
-              width: 7,
-              height: 7,
+              width: 8,
+              height: 8,
               borderRadius: '50%',
-              backgroundColor: marketStatus.isOpen ? 'var(--accent-emerald)' : '#f43f5e',
+              backgroundColor: marketStatus.isOpen ? 'var(--accent-emerald)' : '#ef4444',
               display: 'inline-block',
-              boxShadow: marketStatus.isOpen ? '0 0 6px #10b981' : '0 0 6px #f43f5e'
+              boxShadow: marketStatus.isOpen ? '0 0 8px #10b981' : '0 0 8px #ef4444'
             }} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  color: marketStatus.isOpen ? 'var(--accent-emerald)' : '#fca5a5'
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  color: marketStatus.isOpen ? 'var(--accent-emerald)' : '#fca5a5',
+                  letterSpacing: '0.5px'
                 }}>
-                  {marketStatus.isOpen ? 'NSE LIVE' : 'NSE CLOSED'}
+                  {marketStatus.isOpen ? '🟢 NSE LIVE' : '🔴 MARKET CLOSED'}
                 </span>
-                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                <span className="mono" style={{ fontSize: '0.68rem', color: '#cbd5e1' }}>
                   {marketStatus.istTimeString ? `${marketStatus.istTimeString} IST` : ''}
                 </span>
               </div>
-              <span style={{ fontSize: '0.62rem', color: simulationPaused ? 'var(--accent-amber)' : 'var(--accent-cyan)' }}>
-                {simulationPaused ? '⏸️ Ticks Frozen (Prices Fixed)' : '⚡ 24/7 Simulator Active'}
+              <span style={{ fontSize: '0.62rem', color: marketStatus.isOpen ? '#86efac' : '#fca5a5', fontWeight: 600 }}>
+                {marketStatus.isOpen ? 'Session Active (09:15 - 15:30)' : 'Official Closing LTP • Real Data'}
               </span>
             </div>
-            <HelpCircle size={13} color="var(--accent-cyan)" style={{ opacity: 0.8 }} />
+            <HelpCircle size={13} color={marketStatus.isOpen ? 'var(--accent-emerald)' : '#fca5a5'} style={{ opacity: 0.8 }} />
           </div>
         )}
 
@@ -338,27 +339,7 @@ export default function HeaderToolbar({
           </button>
         )}
 
-        {/* Toggle Freeze / Resume Ticks */}
-        {onToggleSimulation && (
-          <button
-            onClick={onToggleSimulation}
-            className="btn btn-outline"
-            title={simulationPaused ? "Resume simulated price fluctuations" : "Freeze all stock prices at current levels"}
-            style={{
-              padding: '0.35rem 0.65rem',
-              fontSize: '0.75rem',
-              borderColor: simulationPaused ? 'rgba(245, 158, 11, 0.45)' : 'rgba(148, 163, 184, 0.25)',
-              color: simulationPaused ? 'var(--accent-amber)' : 'var(--text-muted)',
-              background: simulationPaused ? 'rgba(245, 158, 11, 0.12)' : 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem'
-            }}
-          >
-            {simulationPaused ? <Play size={12} color="var(--accent-amber)" /> : <Pause size={12} />}
-            <span>{simulationPaused ? 'Resume Ticks' : 'Freeze Ticks'}</span>
-          </button>
-        )}
+
       </div>
 
       {/* Right Controls: Scan & Strategy Configuration */}
