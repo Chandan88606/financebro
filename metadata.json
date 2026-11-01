@@ -1,0 +1,8 @@
+{
+  "name": "FinanceBro",
+  "description": "Institutional-grade Indian Stock Market (NSE) 10-module consensus scanner, TradingView candlestick charts, customizable strategy engine, and zero-risk paper trading.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
