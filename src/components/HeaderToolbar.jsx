@@ -18,6 +18,7 @@ export default function HeaderToolbar({
   onSelectScreen,
   walletBalance,
   onResetWallet,
+  onSeedDemo,
   filterAffordable,
   onToggleAffordable,
   autoExit,
@@ -257,6 +258,31 @@ export default function HeaderToolbar({
           <ShieldCheck size={13} />
           <span>Auto-Exit Active</span>
         </label>
+
+        {onSeedDemo && (
+          <button
+            onClick={() => {
+              if (confirm("Load realistic Institutional Demo Portfolio (4 Equity Holdings + F&O Spreads + Ledger History)?")) {
+                onSeedDemo();
+              }
+            }}
+            className="btn btn-outline"
+            title="Load sample paper trades & holdings"
+            style={{
+              padding: '0.35rem 0.75rem',
+              fontSize: '0.78rem',
+              borderColor: 'rgba(56, 189, 248, 0.4)',
+              color: 'var(--accent-cyan)',
+              background: 'rgba(56, 189, 248, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            <Zap size={13} color="var(--accent-cyan)" />
+            <span>Load Demo Data</span>
+          </button>
+        )}
       </div>
 
       {/* Right Controls: Scan & Strategy Configuration */}

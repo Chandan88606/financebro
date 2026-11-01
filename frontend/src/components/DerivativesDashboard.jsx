@@ -494,7 +494,19 @@ export default function DerivativesDashboard({
         <div style={{ maxHeight: 220, overflowY: 'auto' }}>
           {positions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-              No active F&O spreads or hedges deployed. Select any strategy above and click "Deploy Strategy".
+              <p style={{ marginBottom: '0.75rem' }}>No active F&O spreads or hedges deployed. Select any strategy above and click "Deploy Strategy".</p>
+              <button
+                onClick={async () => {
+                  await api.seedDemoPortfolio();
+                  await loadPositionsAndRules();
+                  if (onRefreshWallet) await onRefreshWallet();
+                }}
+                className="btn btn-emerald"
+                style={{ fontSize: '0.78rem', padding: '0.4rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <Zap size={13} />
+                <span>⚡ Load Sample F&O Spreads (NIFTY Iron Condor & BANKNIFTY Spread)</span>
+              </button>
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>

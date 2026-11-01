@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Briefcase, ArrowUpRight, ArrowDownRight, History, RotateCcw } from 'lucide-react';
+import { Briefcase, ArrowUpRight, ArrowDownRight, History, RotateCcw, Zap, HelpCircle, ShieldCheck } from 'lucide-react';
 
 export default function PortfolioLedger({
   portfolio,
+  autoExit = true,
   onOpenTrade,
-  onResetPortfolio
+  onResetPortfolio,
+  onSeedDemo
 }) {
   const [activeTab, setActiveTab] = useState('positions'); // 'positions' or 'history'
 
@@ -116,26 +118,83 @@ export default function PortfolioLedger({
           </button>
         </div>
 
-        <button
-          onClick={() => {
-            if (confirm("Reset paper trading portfolio and trade history?")) {
-              onResetPortfolio();
-            }
-          }}
-          className="btn btn-outline"
-          style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', color: 'var(--text-muted)' }}
-        >
-          <RotateCcw size={12} />
-          <span>Reset Ledger</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {onSeedDemo && (
+            <button
+              onClick={() => {
+                if (confirm("Load realistic Institutional Demo Portfolio (4 Equity Holdings + F&O Spreads + Ledger History)?")) {
+                  onSeedDemo();
+                }
+              }}
+              className="btn btn-outline"
+              title="Load sample paper trades & holdings"
+              style={{
+                fontSize: '0.72rem',
+                padding: '0.25rem 0.6rem',
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                color: 'var(--accent-cyan)',
+                background: 'rgba(56, 189, 248, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem'
+              }}
+            >
+              <Zap size={12} color="var(--accent-cyan)" />
+              <span>Load Demo Data</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              if (confirm("Reset paper trading portfolio and trade history?")) {
+                onResetPortfolio();
+              }
+            }}
+            className="btn btn-outline"
+            style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', color: 'var(--text-muted)' }}
+          >
+            <RotateCcw size={12} />
+            <span>Reset Ledger</span>
+          </button>
+        </div>
       </div>
 
       {/* Table Content */}
-      <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 260, overflowY: 'auto' }}>
         {activeTab === 'positions' ? (
           positions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              No active holdings yet. Select any stock from the watchlist and execute a paper buy order.
+            <div style={{
+              background: 'rgba(30, 41, 59, 0.35)',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 12,
+              padding: '1.25rem 1.5rem',
+              textAlign: 'center'
+            }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(56, 189, 248, 0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.6rem' }}>
+                <Briefcase size={20} color="var(--accent-cyan)" />
+              </div>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-main)' }}>
+                No Active Holdings Currently Open
+              </h4>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: 520, margin: '0 auto 0.9rem', lineHeight: 1.5 }}>
+                {autoExit ? (
+                  <span>
+                    💡 <strong>Where did bought stocks go?</strong> If 'Auto-Exit Active' is ON, positions that hit Stop-Loss (-3%), Take-Profit (+10%), or severe breakdown are automatically closed into cash. Check the <strong>Trade Ledger</strong> tab to review closed trades.
+                  </span>
+                ) : (
+                  <span>Select any stock from the watchlist to execute a paper buy order.</span>
+                )}
+              </p>
+              {onSeedDemo && (
+                <button
+                  onClick={onSeedDemo}
+                  className="btn btn-emerald"
+                  style={{ fontSize: '0.82rem', padding: '0.45rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+                >
+                  <Zap size={14} />
+                  <span>⚡ Load Demo Portfolio (RELIANCE, INFY, TATASTEEL, HDFCBANK)</span>
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -185,7 +244,7 @@ export default function PortfolioLedger({
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', minWidth: 600 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', minWidth: 650 }}>
                 <thead>
                   <tr style={{ color: 'var(--text-muted)', textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }}>
                     <th style={{ padding: '0.5rem 0.75rem' }}>Time</th>
@@ -207,11 +266,25 @@ export default function PortfolioLedger({
                           {t.timestamp.split(' ')[1] || t.timestamp}
                         </td>
                         <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <span className={`badge-tag ${isBuy ? 'badge-emerald' : 'badge-rose'}`} style={{ fontSize: '0.65rem' }}>
-                            {t.action}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span className={`badge-tag ${isBuy ? 'badge-emerald' : 'badge-rose'}`} style={{ fontSize: '0.65rem' }}>
+                              {t.action}
+                            </span>
+                            {t.exitReason && (
+                              <span style={{ fontSize: '0.62rem', color: t.autoExited ? 'var(--accent-rose)' : 'var(--text-muted)' }} title={t.exitReason}>
+                                {t.autoExited ? '⚡ Auto-Exit' : 'Manual'}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>{t.ticker}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>
+                          <div>{t.ticker}</div>
+                          {t.exitReason && (
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.exitReason}>
+                              {t.exitReason}
+                            </div>
+                          )}
+                        </td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>{t.qty}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{t.price.toFixed(2)}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{t.turnover.toFixed(2)}</td>

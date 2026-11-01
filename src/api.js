@@ -251,7 +251,7 @@ export const api = {
   },
 
   executeOrder: async (order) => {
-    const { ticker, action, qty, price } = order;
+    const { ticker, action, qty, price, exitReason, autoExited } = order;
     if (!qty || qty <= 0) throw new Error("Quantity must be greater than 0");
     if (!price || price <= 0) throw new Error("Price must be greater than 0");
 
@@ -269,7 +269,9 @@ export const api = {
       turnover,
       charges: totalCharges,
       breakdown: chargesBreakdown,
-      pnl: 0.0
+      pnl: 0.0,
+      exitReason: exitReason || null,
+      autoExited: !!autoExited
     };
 
     if (action.toUpperCase() === 'BUY') {
@@ -331,7 +333,8 @@ export const api = {
         pos.invested = Math.round(pos.qty * pos.avg_price * 100) / 100;
       }
 
-      const log = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] 🔴 [SELL ORDER] ${qty}x ${ticker} @ ₹${price.toFixed(2)} | Realized P&L: ₹${pnl.toFixed(2)} | Fees: ₹${totalCharges.toFixed(2)} | Cash: ₹${localPortfolio.wallet_balance.toFixed(2)}`;
+      const reasonTag = exitReason ? ` [${exitReason}]` : '';
+      const log = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] 🔴 [SELL ORDER${reasonTag}] ${qty}x ${ticker} @ ₹${price.toFixed(2)} | Realized P&L: ₹${pnl.toFixed(2)} | Fees: ₹${totalCharges.toFixed(2)} | Cash: ₹${localPortfolio.wallet_balance.toFixed(2)}`;
       localLogs.push(log);
     }
 
@@ -373,6 +376,247 @@ export const api = {
 
     await supabaseDb.savePortfolio(initial_capital, initial_capital);
     return { success: true, wallet_balance: initial_capital };
+  },
+
+  seedDemoPortfolio: async () => {
+    const now = new Date();
+    const timeStr = (minsAgo) => {
+      const d = new Date(now.getTime() - minsAgo * 60000);
+      return d.toISOString().replace('T', ' ').substring(0, 19);
+    };
+
+    const demoPositions = [
+      {
+        ticker: "RELIANCE",
+        qty: 15,
+        avg_price: 1270.50,
+        current_price: 1285.50,
+        invested: 19057.50,
+        unrealized_pnl: 225.00,
+        unrealized_pnl_pct: 1.18,
+        opened_at: timeStr(45)
+      },
+      {
+        ticker: "TATASTEEL",
+        qty: 100,
+        avg_price: 144.20,
+        current_price: 148.50,
+        invested: 14420.00,
+        unrealized_pnl: 430.00,
+        unrealized_pnl_pct: 2.98,
+        opened_at: timeStr(72)
+      },
+      {
+        ticker: "INFY",
+        qty: 12,
+        avg_price: 1712.00,
+        current_price: 1740.00,
+        invested: 20544.00,
+        unrealized_pnl: 336.00,
+        unrealized_pnl_pct: 1.64,
+        opened_at: timeStr(95)
+      },
+      {
+        ticker: "HDFCBANK",
+        qty: 10,
+        avg_price: 1660.00,
+        current_price: 1690.00,
+        invested: 16600.00,
+        unrealized_pnl: 300.00,
+        unrealized_pnl_pct: 1.81,
+        opened_at: timeStr(130)
+      }
+    ];
+
+    const demoHistory = [
+      {
+        id: `TRD-${Date.now() - 1200000}`,
+        timestamp: timeStr(20),
+        ticker: "TCS",
+        action: "SELL",
+        qty: 5,
+        price: 3890.00,
+        turnover: 19450.00,
+        charges: 39.45,
+        pnl: 840.00,
+        exitReason: "EQUITY TAKE-PROFIT TARGET REACHED (+4.51%)",
+        autoExited: true
+      },
+      {
+        id: `TRD-${Date.now() - 2700000}`,
+        timestamp: timeStr(45),
+        ticker: "RELIANCE",
+        action: "BUY",
+        qty: 15,
+        price: 1270.50,
+        turnover: 19057.50,
+        charges: 42.10,
+        pnl: 0.0,
+        exitReason: null,
+        autoExited: false
+      },
+      {
+        id: `TRD-${Date.now() - 4320000}`,
+        timestamp: timeStr(72),
+        ticker: "TATASTEEL",
+        action: "BUY",
+        qty: 100,
+        price: 144.20,
+        turnover: 14420.00,
+        charges: 35.20,
+        pnl: 0.0,
+        exitReason: null,
+        autoExited: false
+      },
+      {
+        id: `TRD-${Date.now() - 5700000}`,
+        timestamp: timeStr(95),
+        ticker: "INFY",
+        action: "BUY",
+        qty: 12,
+        price: 1712.00,
+        turnover: 20544.00,
+        charges: 43.60,
+        pnl: 0.0,
+        exitReason: null,
+        autoExited: false
+      },
+      {
+        id: `TRD-${Date.now() - 7800000}`,
+        timestamp: timeStr(130),
+        ticker: "HDFCBANK",
+        action: "BUY",
+        qty: 10,
+        price: 1660.00,
+        turnover: 16600.00,
+        charges: 38.80,
+        pnl: 0.0,
+        exitReason: null,
+        autoExited: false
+      },
+      {
+        id: `TRD-${Date.now() - 10800000}`,
+        timestamp: timeStr(180),
+        ticker: "BHARTIARTL",
+        action: "SELL",
+        qty: 10,
+        price: 1685.00,
+        turnover: 16850.00,
+        charges: 36.50,
+        pnl: 460.00,
+        exitReason: "MANUAL",
+        autoExited: false
+      }
+    ];
+
+    const demoFoPositions = [
+      {
+        id: `FO-${Date.now() - 3600000}`,
+        timestamp: timeStr(60),
+        strategyId: "IRON_CONDOR",
+        strategyName: "Iron Condor",
+        alias: "Weekly Expiry Range Trading",
+        phase: "Phase 3: Sideways & High-IV",
+        underlyingTicker: "NIFTY",
+        underlyingName: "NIFTY 50 Index",
+        spotPriceAtEntry: 24250.00,
+        lots: 1,
+        lotSize: 50,
+        legs: [
+          { strike: 23900, optionType: 'PE', action: 'BUY', premium: 22.4, qtyRatio: 1, label: 'OTM Put Wing (Protection)' },
+          { strike: 24100, optionType: 'PE', action: 'SELL', premium: 58.2, qtyRatio: 1, label: 'Short OTM Put (Credit Decay)' },
+          { strike: 24400, optionType: 'CE', action: 'SELL', premium: 61.5, qtyRatio: 1, label: 'Short OTM Call (Credit Decay)' },
+          { strike: 24600, optionType: 'CE', action: 'BUY', premium: 24.8, qtyRatio: 1, label: 'OTM Call Wing (Protection)' }
+        ],
+        isCredit: true,
+        entryNetPremium: 72.5,
+        premiumCashEffect: 3625.00,
+        totalMarginRequired: 42000,
+        maxProfit: 3625.00,
+        maxLoss: 6375.00,
+        breakevens: [24027.5, 24472.5],
+        dte: 4,
+        expiryDay: "Thursday",
+        chargesPaid: 108.50,
+        unrealizedPnl: 1450.00,
+        unrealizedPnlPct: 3.45
+      },
+      {
+        id: `FO-${Date.now() - 7200000}`,
+        timestamp: timeStr(120),
+        strategyId: "BULL_CALL_SPREAD",
+        strategyName: "Bull Call Spread",
+        alias: "Vertical Debit Spread",
+        phase: "Phase 1: Bull Market Setups",
+        underlyingTicker: "BANKNIFTY",
+        underlyingName: "NIFTY Bank Index",
+        spotPriceAtEntry: 51800.00,
+        lots: 1,
+        lotSize: 30,
+        legs: [
+          { strike: 51500, optionType: 'CE', action: 'BUY', premium: 380.0, qtyRatio: 1, label: 'ITM Long Call' },
+          { strike: 52200, optionType: 'CE', action: 'SELL', premium: 165.0, qtyRatio: 1, label: 'OTM Short Call (Theta Hedge)' }
+        ],
+        isCredit: false,
+        entryNetPremium: 215.0,
+        premiumCashEffect: 6450.00,
+        totalMarginRequired: 22500,
+        maxProfit: 14550.00,
+        maxLoss: 6450.00,
+        breakevens: [51715.0],
+        dte: 3,
+        expiryDay: "Wednesday",
+        chargesPaid: 58.20,
+        unrealizedPnl: 2100.00,
+        unrealizedPnlPct: 9.33
+      }
+    ];
+
+    const demoFoHistory = [
+      {
+        id: `FO-HIST-${Date.now() - 86400000}`,
+        timestamp: timeStr(1440),
+        exitTimestamp: timeStr(720),
+        strategyId: "BULL_PUT_SPREAD",
+        strategyName: "Bull Put Spread",
+        alias: "Credit Put Spread",
+        phase: "Phase 1: Bull Market Setups",
+        underlyingTicker: "NIFTY",
+        underlyingName: "NIFTY 50 Index",
+        lots: 1,
+        lotSize: 50,
+        exitReason: "TAKE-PROFIT TARGET REACHED (+50% Max Profit)",
+        realizedPnl: 2400.00,
+        exitCharges: 52.30
+      }
+    ];
+
+    localPortfolio = {
+      wallet_balance: 38450.0,
+      initial_capital: 100000.0,
+      invested_capital: 70621.50,
+      current_portfolio_value: 71912.50,
+      total_equity: 113912.50,
+      unrealized_pnl: 1291.00,
+      realized_pnl: 1300.00,
+      net_pnl: 2353.95,
+      roi_pct: 2.35,
+      total_charges_paid: 237.05,
+      positions: demoPositions,
+      history: demoHistory
+    };
+
+    localFoPositions = demoFoPositions;
+    localFoHistory = demoFoHistory;
+
+    localLogs.push(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ⚡ Institutional Demo Portfolio loaded: 4 NSE Equity holdings (RELIANCE, TATASTEEL, INFY, HDFCBANK) and 2 F&O strategies (NIFTY Iron Condor, BANKNIFTY Bull Call Spread).`);
+
+    saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+    saveStorage(STORAGE_KEYS.FO_POSITIONS, localFoPositions);
+    saveStorage(STORAGE_KEYS.FO_HISTORY, localFoHistory);
+    saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
+
+    return { success: true, portfolio: localPortfolio, foPositions: localFoPositions };
   },
 
   getLogs: async () => {

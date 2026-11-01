@@ -160,9 +160,8 @@ export default function App() {
     if (!autoExit) return;
 
     const intervalId = setInterval(async () => {
-      // 4A. Check Equity Positions Auto-Exit
+      // 4A. Check Equity Positions Auto-Exit (Stop-loss, Take-profit, Severe breakdown)
       if (portfolio && portfolio.positions && portfolio.positions.length > 0) {
-        const exitThreshold = rules?.consensus?.auto_sell_exit_threshold ?? 5;
         const stopLossPct = rules?.risk?.stop_loss_pct ?? 3.0;
         const takeProfitPct = rules?.risk?.take_profit_pct ?? 10.0;
 
@@ -178,10 +177,11 @@ export default function App() {
             let exitReason = null;
             if (pnlPct <= -Math.abs(stopLossPct)) {
               exitReason = `EQUITY STOP-LOSS TRIGGERED (${pnlPct.toFixed(2)}% <= -${stopLossPct}%)`;
-            } else if (score < exitThreshold) {
-              exitReason = `CONSENSUS SCORE DROP (${score}/10 < ${exitThreshold}/10)`;
             } else if (takeProfitPct > 0 && pnlPct >= takeProfitPct) {
               exitReason = `EQUITY TAKE-PROFIT TARGET REACHED (+${pnlPct.toFixed(2)}% >= +${takeProfitPct}%)`;
+            } else if (score <= 2) {
+              // Only trigger on severe bearish consensus breakdown (score <= 2/10) so manual holdings aren't immediately dumped
+              exitReason = `SEVERE CONSENSUS BREAKDOWN (${score}/10 <= 2/10)`;
             }
 
             if (exitReason) {
@@ -189,7 +189,9 @@ export default function App() {
                 ticker: pos.ticker,
                 action: 'SELL',
                 qty: pos.qty,
-                price: currentPrice
+                price: currentPrice,
+                exitReason,
+                autoExited: true
               });
               setLogs(prev => [
                 ...prev.slice(-150),
@@ -330,6 +332,13 @@ export default function App() {
     await refreshPortfolio();
   };
 
+  const handleSeedDemoPortfolio = async () => {
+    await api.seedDemoPortfolio();
+    await refreshPortfolio();
+    const stocksRes = await api.getStocks();
+    setStocks(stocksRes.stocks || []);
+  };
+
   // Determine current screen from location
   const isDerivatives = location.pathname.includes('/derivatives') || location.pathname.includes('/options');
 
@@ -340,6 +349,7 @@ export default function App() {
         currentScreen={isDerivatives ? 'OPTIONS' : 'EQUITY'}
         walletBalance={walletBalance}
         onResetWallet={handleResetPortfolio}
+        onSeedDemo={handleSeedDemoPortfolio}
         filterAffordable={filterAffordable}
         onToggleAffordable={setFilterAffordable}
         autoExit={autoExit}
@@ -444,8 +454,10 @@ export default function App() {
 
                     <PortfolioLedger
                       portfolio={portfolio}
+                      autoExit={autoExit}
                       onOpenTrade={handleOpenTrade}
                       onResetPortfolio={() => handleResetPortfolio(100000)}
+                      onSeedDemo={handleSeedDemoPortfolio}
                     />
 
                     <TerminalLogs logs={logs} />
