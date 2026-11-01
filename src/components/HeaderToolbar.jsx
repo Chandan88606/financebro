@@ -124,16 +124,32 @@ export default function HeaderToolbar({
             onClick={() => handleNav('OPTIONS')}
             className="btn"
             style={{
-              background: activeScreen === 'OPTIONS' ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'transparent',
-              color: activeScreen === 'OPTIONS' ? '#ffffff' : 'var(--text-muted)',
-              padding: '0.4rem 0.85rem',
-              fontSize: '0.8rem',
+              background: activeScreen === 'OPTIONS' ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'rgba(16, 185, 129, 0.12)',
+              color: activeScreen === 'OPTIONS' ? '#ffffff' : '#34d399',
+              border: activeScreen === 'OPTIONS' ? '1px solid #10b981' : '1px solid rgba(16, 185, 129, 0.35)',
+              padding: '0.4rem 0.95rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
-              boxShadow: activeScreen === 'OPTIONS' ? '0 2px 8px rgba(5, 150, 105, 0.35)' : 'none'
+              boxShadow: activeScreen === 'OPTIONS' ? '0 0 16px rgba(16, 185, 129, 0.5)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              cursor: 'pointer'
             }}
           >
-            <Zap size={14} />
-            <span>Derivatives Strategy (10 Spreads)</span>
+            <Zap size={15} color={activeScreen === 'OPTIONS' ? '#ffffff' : '#10b981'} />
+            <span>⚡ F&O Derivatives (10 Spreads)</span>
+            <span style={{
+              fontSize: '0.62rem',
+              fontWeight: 800,
+              padding: '0.12rem 0.45rem',
+              borderRadius: 6,
+              background: activeScreen === 'OPTIONS' ? '#ffffff' : '#10b981',
+              color: activeScreen === 'OPTIONS' ? '#047857' : '#0f172a',
+              letterSpacing: '0.5px'
+            }}>
+              NEW
+            </span>
             {foPositionsCount > 0 && (
               <span className="badge-tag badge-amber" style={{ fontSize: '0.62rem', padding: '0.1rem 0.35rem' }}>
                 {foPositionsCount}

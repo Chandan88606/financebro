@@ -8,6 +8,7 @@ import TerminalLogs from './components/TerminalLogs';
 import RulesModal from './components/RulesModal';
 import OrderModal from './components/OrderModal';
 import DerivativesDashboard from './components/DerivativesDashboard';
+import { Zap, BarChart3, ArrowRight } from 'lucide-react';
 import { api, getWsUrl, IS_STANDALONE } from './api';
 
 export default function App() {
@@ -357,29 +358,98 @@ export default function App() {
           <Route
             path="/"
             element={
-              <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.25rem' }}>
-                <Watchlist
-                  stocks={stocks}
-                  selectedTicker={selectedTicker}
-                  onSelectStock={handleSelectStock}
-                  walletBalance={walletBalance}
-                  filterAffordable={filterAffordable}
-                />
+              <div>
+                {/* High Visibility F&O Quick Switcher Banner */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, rgba(2, 132, 199, 0.14) 100%)',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  borderRadius: 14,
+                  padding: '0.85rem 1.25rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  flexWrap: 'wrap',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.25)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                      flexShrink: 0
+                    }}>
+                      <Zap size={22} color="#ffffff" />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
+                          Institutional Futures & Options (F&O) Terminal
+                        </span>
+                        <span className="badge-tag badge-emerald" style={{ fontSize: '0.65rem', fontWeight: 800 }}>
+                          10 SPREAD STRATEGIES READY
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: 2, marginBottom: 0 }}>
+                        Bull Call/Put Spreads, Ratio Backspreads, Bear Spreads, Iron Condor, Iron Butterfly, Hedged Straddles/Strangles with Payoff Curves & Auto-Exit.
+                      </p>
+                    </div>
+                  </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  <ConsensusInspector
-                    stockDetail={stockDetail}
-                    onOpenTrade={handleOpenTrade}
+                  <button
+                    onClick={() => navigate('/derivatives')}
+                    className="btn"
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '0.6rem 1.15rem',
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    <span>Switch to F&O Terminal</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.25rem' }}>
+                  <Watchlist
+                    stocks={stocks}
+                    selectedTicker={selectedTicker}
+                    onSelectStock={handleSelectStock}
                     walletBalance={walletBalance}
+                    filterAffordable={filterAffordable}
                   />
 
-                  <PortfolioLedger
-                    portfolio={portfolio}
-                    onOpenTrade={handleOpenTrade}
-                    onResetPortfolio={() => handleResetPortfolio(100000)}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <ConsensusInspector
+                      stockDetail={stockDetail}
+                      onOpenTrade={handleOpenTrade}
+                      walletBalance={walletBalance}
+                    />
 
-                  <TerminalLogs logs={logs} />
+                    <PortfolioLedger
+                      portfolio={portfolio}
+                      onOpenTrade={handleOpenTrade}
+                      onResetPortfolio={() => handleResetPortfolio(100000)}
+                    />
+
+                    <TerminalLogs logs={logs} />
+                  </div>
                 </div>
               </div>
             }
@@ -419,6 +489,60 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      {/* Floating Quick Terminal Switcher Dock */}
+      <div style={{
+        position: 'fixed',
+        bottom: '1.5rem',
+        right: '1.5rem',
+        zIndex: 999
+      }}>
+        {location.pathname.includes('/derivatives') || location.pathname.includes('/options') ? (
+          <button
+            onClick={() => navigate('/equity')}
+            className="btn"
+            style={{
+              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+              color: '#ffffff',
+              padding: '0.65rem 1.15rem',
+              borderRadius: 30,
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              boxShadow: '0 6px 22px rgba(2, 132, 199, 0.5)',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              cursor: 'pointer'
+            }}
+          >
+            <BarChart3 size={16} />
+            <span>Switch to Cash Equity</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/derivatives')}
+            className="btn"
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              padding: '0.65rem 1.15rem',
+              borderRadius: 30,
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              boxShadow: '0 6px 22px rgba(16, 185, 129, 0.5)',
+              border: '1px solid rgba(52, 211, 153, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              cursor: 'pointer'
+            }}
+          >
+            <Zap size={16} />
+            <span>⚡ F&O Derivatives Terminal</span>
+          </button>
+        )}
+      </div>
 
       {/* Equity Strategy & Rules Configuration Modal */}
       <RulesModal

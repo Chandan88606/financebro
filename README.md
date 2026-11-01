@@ -2,9 +2,29 @@
 
 FinanceBro is an institutional-grade algorithmic trading terminal tailored for the **Indian Stock Market (NSE)**, built as a modern **React 18 (Vite)** single-page application.
 
-The terminal features dual specialized screens:
-1. **📊 Screen 1: Cash Equity Terminal** — 10-module algorithmic technical consensus scanner, TradingView candlestick charts, wallet budget filtering, and paper delivery execution.
-2. **⚡ Screen 2: Derivatives & Options Terminal (F&O)** — Dedicated multi-leg institutional options strategies across Bullish, Bearish, and Sideways/High-IV setups with real-time payoff curve diagrams, SEBI span margin models, and autonomous risk management auto-exit.
+---
+
+## 🧭 How to Access the Two Dedicated Screens
+
+FinanceBro features two full trading workstations built into a unified HashRouter architecture:
+
+1. **📊 Screen 1: Cash Equity Terminal** (`#/` or `#/equity`)
+   - 10-module algorithmic technical consensus scanner (EMA, Supertrend, RSI, MACD, Bollinger Bands, Volume Spike, ADX, Stochastic, OBV, Candlestick Patterns)
+   - Real-time TradingView candlestick charts with technical indicators
+   - Wallet budget filtering and instant 1-click delivery paper execution
+   - Automated equity auto-exit monitoring stop-loss (-3%), take-profit (+10%), and consensus degradation
+
+2. **⚡ Screen 2: Futures & Options (F&O) Derivatives Terminal** (`#/derivatives` or `#/options`)
+   - **How to Open**:
+     - Click **`⚡ F&O Derivatives (10 Spreads)`** in the top navigation bar.
+     - Click the glowing banner at the top of the Cash Equity screen: **"Switch to F&O Terminal"**.
+     - Click the floating quick-switch button in the bottom right corner of the screen.
+     - Or append `#/derivatives` directly to your browser URL.
+   - **Strategy Selector**: 10 Master Institutional Spread Strategies across 3 market regimes.
+   - **Interactive Payoff Diagram**: Visual profit/loss area curves with exact breakeven lines and spot prices.
+   - **SEBI Span Margin Engine**: Live calculation of margin requirements with hedged spread relief and Indian statutory STT/GST/exchange turnover charges breakdown.
+   - **Multi-Leg Basket Execution**: 1-click execution of complete 2-leg and 4-leg option structures.
+   - **Autonomous F&O Auto-Exit**: 50% max profit take-profit limit, 100% loss cut, and pre-expiry auto-squareoff to avoid physical delivery.
 
 ---
 
@@ -37,10 +57,15 @@ The terminal features dual specialized screens:
 
 ---
 
-## 🏃 Getting Started
+## 🚀 Repository & Deployment Structure
 
+The repository is synchronized across **both `main` and `master` branches**:
+- **Root Directory (`./`)**: Complete Vite + React 18 application with all components and F&O engine.
+- **Frontend Directory (`frontend/`)**: Fully mirrored copy for deployment platforms (Cloudflare Pages, Vercel, Netlify) configured with `Root directory: frontend`.
+
+### Local Run:
 ```bash
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the terminal.
+Open [http://localhost:3000](http://localhost:3000) (Cash Equity) or [http://localhost:3000/#/derivatives](http://localhost:3000/#/derivatives) (F&O Derivatives).
