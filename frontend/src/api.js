@@ -128,12 +128,67 @@ let localLogs = loadStorage(STORAGE_KEYS.LOGS, [
 
 // Dynamic offsets for live price ticks
 const priceOffsets = {};
+let simulationPaused = false;
+
+export const getIndianMarketStatus = () => {
+  // IST is UTC + 5:30
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const istDate = new Date(utc + (3600000 * 5.5));
+
+  const day = istDate.getDay(); // 0 = Sunday, 6 = Saturday
+  const hour = istDate.getHours();
+  const minute = istDate.getMinutes();
+  const timeInMinutes = hour * 60 + minute;
+
+  const isWeekday = day >= 1 && day <= 5;
+  // NSE Regular trading hours: 09:15 to 15:30 IST (555 to 930 mins)
+  const isMarketHours = isWeekday && (timeInMinutes >= 555 && timeInMinutes <= 930);
+
+  const istFormatted = istDate.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+
+  return {
+    isOpen: isMarketHours,
+    isWeekend: day === 0 || day === 6,
+    istTimeString: istFormatted,
+    dayName: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day],
+    statusText: isMarketHours
+      ? 'NSE LIVE (09:15 - 15:30 IST)'
+      : (day === 0 || day === 6 ? 'NSE CLOSED (WEEKEND)' : (timeInMinutes < 555 ? 'NSE CLOSED (PRE-MARKET)' : 'NSE CLOSED (POST-MARKET)')),
+    simActive: !isMarketHours && !simulationPaused,
+    simulationPaused
+  };
+};
+
+export const isSimulationActive = () => !simulationPaused;
+export const setSimulationActive = (active) => {
+  simulationPaused = !active;
+  return !simulationPaused;
+};
 
 export const api = {
+  getMarketStatus: () => {
+    return {
+      ...getIndianMarketStatus(),
+      simulationPaused
+    };
+  },
+
+  toggleSimulation: (active) => {
+    simulationPaused = (active !== undefined) ? !active : !simulationPaused;
+    return !simulationPaused;
+  },
+
   getHealth: async () => {
     return {
       status: "online",
       service: "FinanceBro Institutional Engine",
+      market_status: getIndianMarketStatus(),
       wallet_balance: localPortfolio.wallet_balance,
       stocks_tracked: MASTER_NSE_STOCKS.length,
       fo_underlyings_tracked: FO_UNDERLYINGS.length,
@@ -389,11 +444,11 @@ export const api = {
       {
         ticker: "RELIANCE",
         qty: 15,
-        avg_price: 1270.50,
-        current_price: 1285.50,
-        invested: 19057.50,
-        unrealized_pnl: 225.00,
-        unrealized_pnl_pct: 1.18,
+        avg_price: 1148.00,
+        current_price: 1164.90,
+        invested: 17220.00,
+        unrealized_pnl: 253.50,
+        unrealized_pnl_pct: 1.47,
         opened_at: timeStr(45)
       },
       {
@@ -448,9 +503,9 @@ export const api = {
         ticker: "RELIANCE",
         action: "BUY",
         qty: 15,
-        price: 1270.50,
-        turnover: 19057.50,
-        charges: 42.10,
+        price: 1148.00,
+        turnover: 17220.00,
+        charges: 38.10,
         pnl: 0.0,
         exitReason: null,
         autoExited: false
@@ -625,6 +680,8 @@ export const api = {
 
   // Fluctuate prices slightly to simulate live NSE market feed ticks
   tickMarket: () => {
+    if (simulationPaused) return;
+
     MASTER_NSE_STOCKS.forEach(stock => {
       const prev = priceOffsets[stock.ticker] || 0;
       const drift = (Math.random() - 0.49) * 0.4;

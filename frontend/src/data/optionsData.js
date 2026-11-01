@@ -57,15 +57,15 @@ export const FO_UNDERLYINGS = [
     symbol: "RELIANCE.NS",
     name: "Reliance Industries Ltd.",
     type: "STOCK",
-    spotPrice: 1285.00,
+    spotPrice: 1164.90,
     lotSize: 250,
     strikeStep: 20,
     weeklyExpiryDay: "Monthly Last Thursday",
     iv: 22.4,
     ivPercentile: 74,
     marketBias: "HIGH_IV_PRE_EVENT",
-    support: 1240,
-    resistance: 1320,
+    support: 1120,
+    resistance: 1200,
     catalyst: "Q3 Results & Retail Spin-off Speculation"
   },
   {

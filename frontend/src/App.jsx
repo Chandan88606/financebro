@@ -7,6 +7,7 @@ import PortfolioLedger from './components/PortfolioLedger';
 import TerminalLogs from './components/TerminalLogs';
 import RulesModal from './components/RulesModal';
 import OrderModal from './components/OrderModal';
+import MarketStatusModal from './components/MarketStatusModal';
 import DerivativesDashboard from './components/DerivativesDashboard';
 import { Zap, BarChart3, ArrowRight } from 'lucide-react';
 import { api, getWsUrl, IS_STANDALONE } from './api';
@@ -28,6 +29,10 @@ export default function App() {
 
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isMarketModalOpen, setIsMarketModalOpen] = useState(false);
+  const [simulationPaused, setSimulationPaused] = useState(false);
+  const [marketStatus, setMarketStatus] = useState(() => api.getMarketStatus());
+
   const [tradeModal, setTradeModal] = useState({
     isOpen: false,
     ticker: 'RELIANCE',
@@ -40,6 +45,21 @@ export default function App() {
 
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef(null);
+
+  // Keep IST market clock updated every second
+  useEffect(() => {
+    const clockTimer = setInterval(() => {
+      setMarketStatus(api.getMarketStatus());
+    }, 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+
+  const handleToggleSimulation = () => {
+    const nextPaused = !simulationPaused;
+    api.toggleSimulation(!nextPaused);
+    setSimulationPaused(nextPaused);
+    setMarketStatus(api.getMarketStatus());
+  };
 
   // 1. Initial Data Fetch
   useEffect(() => {
@@ -359,6 +379,10 @@ export default function App() {
         loadingStocks={loadingStocks}
         wsConnected={wsConnected}
         foPositionsCount={foPositionsCount}
+        marketStatus={marketStatus}
+        simulationPaused={simulationPaused}
+        onToggleSimulation={handleToggleSimulation}
+        onOpenMarketInfo={() => setIsMarketModalOpen(true)}
       />
 
       {/* Main Grid Workspace with HashRouter Routes */}
@@ -575,6 +599,15 @@ export default function App() {
         walletBalance={walletBalance}
         currentHolding={tradeModal.holding}
         onExecute={handleExecuteOrder}
+      />
+
+      {/* NSE Market Status & Simulator Explanation Modal */}
+      <MarketStatusModal
+        isOpen={isMarketModalOpen}
+        onClose={() => setIsMarketModalOpen(false)}
+        marketStatus={marketStatus}
+        simulationPaused={simulationPaused}
+        onToggleSimulation={handleToggleSimulation}
       />
     </div>
   );

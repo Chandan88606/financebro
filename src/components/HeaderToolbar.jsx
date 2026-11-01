@@ -8,7 +8,11 @@ import {
   ShieldCheck,
   BarChart3,
   Zap,
-  Scale
+  Scale,
+  Clock,
+  HelpCircle,
+  Play,
+  Pause
 } from 'lucide-react';
 
 import { IS_STANDALONE } from '../api';
@@ -27,7 +31,11 @@ export default function HeaderToolbar({
   onRefreshStocks,
   loadingStocks,
   wsConnected,
-  foPositionsCount = 0
+  foPositionsCount = 0,
+  marketStatus,
+  simulationPaused,
+  onToggleSimulation,
+  onOpenMarketInfo
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,6 +104,52 @@ export default function HeaderToolbar({
             </div>
           </div>
         </div>
+
+        {/* NSE Market Session & Simulator Status Pill */}
+        {marketStatus && (
+          <div 
+            onClick={onOpenMarketInfo}
+            title="Click to view NSE market hours & paper trading simulator details"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: marketStatus.isOpen ? 'rgba(16, 185, 129, 0.12)' : 'rgba(30, 41, 59, 0.85)',
+              border: `1px solid ${marketStatus.isOpen ? 'rgba(16, 185, 129, 0.35)' : 'rgba(148, 163, 184, 0.22)'}`,
+              borderRadius: 8,
+              padding: '0.3rem 0.65rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              backgroundColor: marketStatus.isOpen ? 'var(--accent-emerald)' : '#f43f5e',
+              display: 'inline-block',
+              boxShadow: marketStatus.isOpen ? '0 0 6px #10b981' : '0 0 6px #f43f5e'
+            }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: marketStatus.isOpen ? 'var(--accent-emerald)' : '#fca5a5'
+                }}>
+                  {marketStatus.isOpen ? 'NSE LIVE' : 'NSE CLOSED'}
+                </span>
+                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  {marketStatus.istTimeString ? `${marketStatus.istTimeString} IST` : ''}
+                </span>
+              </div>
+              <span style={{ fontSize: '0.62rem', color: simulationPaused ? 'var(--accent-amber)' : 'var(--accent-cyan)' }}>
+                {simulationPaused ? '⏸️ Ticks Frozen (Prices Fixed)' : '⚡ 24/7 Simulator Active'}
+              </span>
+            </div>
+            <HelpCircle size={13} color="var(--accent-cyan)" style={{ opacity: 0.8 }} />
+          </div>
+        )}
 
         {/* Primary Screen Tabs with HashRouter Navigation */}
         <nav style={{
@@ -281,6 +335,28 @@ export default function HeaderToolbar({
           >
             <Zap size={13} color="var(--accent-cyan)" />
             <span>Load Demo Data</span>
+          </button>
+        )}
+
+        {/* Toggle Freeze / Resume Ticks */}
+        {onToggleSimulation && (
+          <button
+            onClick={onToggleSimulation}
+            className="btn btn-outline"
+            title={simulationPaused ? "Resume simulated price fluctuations" : "Freeze all stock prices at current levels"}
+            style={{
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.75rem',
+              borderColor: simulationPaused ? 'rgba(245, 158, 11, 0.45)' : 'rgba(148, 163, 184, 0.25)',
+              color: simulationPaused ? 'var(--accent-amber)' : 'var(--text-muted)',
+              background: simulationPaused ? 'rgba(245, 158, 11, 0.12)' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+          >
+            {simulationPaused ? <Play size={12} color="var(--accent-amber)" /> : <Pause size={12} />}
+            <span>{simulationPaused ? 'Resume Ticks' : 'Freeze Ticks'}</span>
           </button>
         )}
       </div>

@@ -3,7 +3,7 @@
  */
 
 export const MASTER_NSE_STOCKS = [
-  { ticker: "RELIANCE", symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Retail", basePrice: 1285.50 },
+  { ticker: "RELIANCE", symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Retail", basePrice: 1164.90 },
   { ticker: "TCS", symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "IT Services", basePrice: 3840.00 },
   { ticker: "HDFCBANK", symbol: "HDFCBANK.NS", name: "HDFC Bank Ltd.", sector: "Banking", basePrice: 1690.00 },
   { ticker: "ICICIBANK", symbol: "ICICIBANK.NS", name: "ICICI Bank Ltd.", sector: "Banking", basePrice: 1220.00 },
@@ -13,7 +13,7 @@ export const MASTER_NSE_STOCKS = [
   { ticker: "SBIN", symbol: "SBIN.NS", name: "State Bank of India", sector: "Banking", basePrice: 792.00 },
   { ticker: "LT", symbol: "LT.NS", name: "Larsen & Toubro", sector: "Infrastructure", basePrice: 3510.00 },
   { ticker: "HINDUNILVR", symbol: "HINDUNILVR.NS", name: "Hindustan Unilever", sector: "FMCG", basePrice: 2360.00 },
-  { ticker: "KOTAKBANK", symbol: "KOTAKBANK.NS", name: "Kotak Mahindra Bank", sector: "Banking", basePrice: 461.60 },
+  { ticker: "KOTAKBANK", symbol: "KOTAKBANK.NS", name: "Kotak Mahindra Bank", sector: "Banking", basePrice: 1745.00 },
   { ticker: "AXISBANK", symbol: "AXISBANK.NS", name: "Axis Bank Ltd.", sector: "Banking", basePrice: 1180.00 },
   { ticker: "TATAMOTORS", symbol: "TATAMOTORS.NS", name: "Tata Motors Ltd.", sector: "Automotive", basePrice: 840.00 },
   { ticker: "MARUTI", symbol: "MARUTI.NS", name: "Maruti Suzuki India", sector: "Automotive", basePrice: 11200.00 },
@@ -28,7 +28,7 @@ export const MASTER_NSE_STOCKS = [
   { ticker: "ADANIPORTS", symbol: "ADANIPORTS.NS", name: "Adani Ports & SEZ", sector: "Ports & Infra", basePrice: 1340.00 },
   { ticker: "COALINDIA", symbol: "COALINDIA.NS", name: "Coal India Ltd.", sector: "Mining", basePrice: 418.00 },
   { ticker: "ONGC", symbol: "ONGC.NS", name: "Oil & Natural Gas Corp", sector: "Energy", basePrice: 248.00 },
-  { ticker: "WIPRO", symbol: "WIPRO.NS", name: "Wipro Ltd.", sector: "IT Services", basePrice: 198.30 },
+  { ticker: "WIPRO", symbol: "WIPRO.NS", name: "Wipro Ltd.", sector: "IT Services", basePrice: 545.00 },
   { ticker: "HCLTECH", symbol: "HCLTECH.NS", name: "HCL Technologies", sector: "IT Services", basePrice: 1680.00 },
   { ticker: "ASIANPAINT", symbol: "ASIANPAINT.NS", name: "Asian Paints Ltd.", sector: "Consumer Paints", basePrice: 2320.00 },
   { ticker: "BAJAJFINSV", symbol: "BAJAJFINSV.NS", name: "Bajaj Finserv Ltd.", sector: "Financials", basePrice: 1680.00 },
