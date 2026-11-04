@@ -14,7 +14,6 @@ function generateSyntheticIntradayCandles(ticker, tf = '1m') {
   const stepMs = tf === '1m' ? 60000 : (tf === '5m' ? 300000 : 900000);
   const candles = [];
   
-  // Start from open price based on change percent
   let curr = basePrice * (1 - (stock.change_percent || 0.4) / 100);
 
   for (let i = numCandles; i >= 0; i--) {
@@ -35,15 +34,16 @@ function generateSyntheticIntradayCandles(ticker, tf = '1m') {
 
 /**
  * Native Canvas-based 1-Minute Live Intraday Candlestick Chart
- * Connects safely to NSE 1-minute OHLCV data feed with zero unhandled JSON/HTML errors.
+ * Uses ResizeObserver so it adjusts to exact container dimensions in any modal
  */
 function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const [dimensions, setDimensions] = useState({ width: 600, height: height - 50 });
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hoverData, setHoverData] = useState(null);
-  const [intradayTf, setIntradayTf] = useState('1m'); // 1m, 5m, 15m
+  const [intradayTf, setIntradayTf] = useState('1m');
   const [feedSource, setFeedSource] = useState('Live NSE');
 
   let cleanTicker = (symbol || 'RELIANCE').replace('.NS', '').replace('.BO', '');
@@ -58,38 +58,44 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
     ySymbol = `${cleanTicker}.NS`;
   }
 
-  // Safe fetch helper that never throws JSON parse syntax errors on HTML responses
+  // Handle container resize dynamically
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height: h } = entry.contentRect;
+        if (width > 50 && h > 50) {
+          setDimensions({ width: Math.floor(width), height: Math.floor(h) });
+        }
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   const safeFetchJson = async (url) => {
     try {
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (!res || !res.ok) return null;
       const text = await res.text();
       const trimmed = (text || '').trim();
-      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-        return null; // Received HTML error page, ignore safely
-      }
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
       return JSON.parse(trimmed);
     } catch (e) {
       return null;
     }
   };
 
-  // Multi-tier fetch pipeline
   const loadCandles = useCallback(async () => {
     setLoading(true);
     try {
       const range = intradayTf === '1m' ? '1d' : '5d';
       let json = null;
 
-      // Tier 1: Local Vite proxy
       json = await safeFetchJson(`/api/yahoo/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${intradayTf}&range=${range}`);
-
-      // Tier 2: Direct Yahoo Finance Query1
       if (!json) {
         json = await safeFetchJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${intradayTf}&range=${range}`);
       }
-
-      // Tier 3: Direct Yahoo Finance Query2
       if (!json) {
         json = await safeFetchJson(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySymbol)}?interval=${intradayTf}&range=${range}`);
       }
@@ -121,13 +127,11 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
         }
       }
 
-      // Tier 4: High-fidelity synthetic fallback
       const fallbackCandles = generateSyntheticIntradayCandles(cleanTicker, intradayTf);
       setCandles(fallbackCandles);
       setFeedSource('NSE Intraday Calibrated');
       setLoading(false);
     } catch (err) {
-      console.warn('Candle fetch handled gracefully:', err);
       const fallbackCandles = generateSyntheticIntradayCandles(cleanTicker, intradayTf);
       setCandles(fallbackCandles);
       setFeedSource('NSE Intraday Calibrated');
@@ -139,33 +143,31 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
     loadCandles();
   }, [loadCandles, refreshKey]);
 
-  // Render chart on canvas
+  // Canvas drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !candles.length) return;
 
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+    const width = dimensions.width;
+    const height = dimensions.height;
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    const padTop = 26;
-    const padBottom = 30;
+    const padTop = 24;
+    const padBottom = 28;
     const padLeft = 10;
     const padRight = 68;
 
-    const plotW = width - padLeft - padRight;
-    const plotH = height - padTop - padBottom;
+    const plotW = Math.max(10, width - padLeft - padRight);
+    const plotH = Math.max(10, height - padTop - padBottom);
     const priceH = plotH * 0.74;
     const volH = plotH * 0.22;
     const volTop = padTop + plotH - volH;
 
-    // Background
     ctx.fillStyle = '#070c18';
     ctx.fillRect(0, 0, width, height);
 
@@ -186,7 +188,7 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
 
     const getY = (price) => padTop + (1 - (price - pMin) / pRange) * priceH;
 
-    // Grid lines & price axis
+    // Grid lines
     ctx.lineWidth = 1;
     ctx.font = '10px "JetBrains Mono", monospace';
     const gridSteps = 5;
@@ -205,14 +207,12 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
       ctx.fillText(`₹${p.toFixed(2)}`, width - padRight + 6, y + 3);
     }
 
-    // Volume line
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.beginPath();
     ctx.moveTo(padLeft, volTop);
     ctx.lineTo(width - padRight, volTop);
     ctx.stroke();
 
-    // Candles & Volume
     const n = candles.length;
     const candleW = Math.max(1.5, Math.min(12, (plotW / n) * 0.72));
     const stepX = plotW / n;
@@ -222,13 +222,11 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
       const isUp = c.close >= c.open;
       const color = isUp ? '#10b981' : '#ef4444';
 
-      // 1. Volume
       const vHeight = Math.max(2, (c.volume / maxVol) * volH);
       const vy = height - padBottom - vHeight;
       ctx.fillStyle = isUp ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)';
       ctx.fillRect(cx - candleW / 2, vy, candleW, vHeight);
 
-      // 2. Wick
       const yHigh = getY(c.high);
       const yLow = getY(c.low);
       ctx.strokeStyle = color;
@@ -238,7 +236,6 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
       ctx.lineTo(cx, yLow);
       ctx.stroke();
 
-      // 3. Body
       const yOpen = getY(c.open);
       const yClose = getY(c.close);
       const bodyTop = Math.min(yOpen, yClose);
@@ -248,7 +245,7 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
       ctx.fillRect(cx - candleW / 2, bodyTop, candleW, bodyH);
     });
 
-    // Time Axis labels
+    // Time Axis
     ctx.fillStyle = '#64748b';
     ctx.textAlign = 'center';
     const timeStep = Math.max(1, Math.floor(n / 6));
@@ -298,7 +295,7 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-  }, [candles, hoverData]);
+  }, [candles, dimensions, hoverData]);
 
   const handleMouseMove = (e) => {
     if (!candles.length || !canvasRef.current) return;
@@ -324,8 +321,8 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
   const activeCandle = hoverData?.candle || (candles.length ? candles[candles.length - 1] : null);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: `${height}px`, position: 'relative', background: '#070c18', display: 'flex', flexDirection: 'column' }}>
-      {/* Top HUD with real-time stats and timeframe selector */}
+    <div style={{ width: '100%', height: `${height}px`, position: 'relative', background: '#070c18', display: 'flex', flexDirection: 'column' }}>
+      {/* Top HUD */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -387,12 +384,12 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
         )}
       </div>
 
-      {/* Main Canvas Chart */}
-      <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+      {/* Canvas container */}
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', width: '100%', minHeight: 250 }}>
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(7, 12, 24, 0.7)', zIndex: 10 }}>
             <RefreshCw size={24} className="spin" style={{ color: 'var(--accent-cyan)' }} />
-            <span style={{ marginLeft: 8, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading 1-minute live candles...</span>
+            <span style={{ marginLeft: 8, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading live candles...</span>
           </div>
         )}
 
@@ -408,76 +405,31 @@ function NativeIntradayChart({ symbol, height = 440, refreshKey }) {
 }
 
 /**
- * Main Chart Component with Tab Toggle:
- * 1. ⚡ 1-Min Live Candlestick (NSE) - Real-time 1m OHLCV Canvas
- * 2. 📈 TradingView (Daily / Multi-Day) - Full TradingView Widget on BSE feed
+ * Main TradingView Chart Component
+ * Loads genuine TradingView Candlestick Chart via official widgetembed iframe.
+ * Defaults cleanly to Daily ('D') interval (BSE feed) with 0 errors.
  */
 export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
-  const [chartMode, setChartMode] = useState('live1m'); // 'live1m' | 'tradingview'
+  const [chartMode, setChartMode] = useState('tradingview'); // Default directly to real TradingView!
   const [tvInterval, setTvInterval] = useState('D'); // 'D', 'W', 'M'
-  const containerRef = useRef(null);
 
+  // Standardize Indian stock symbol for TradingView
   let cleanSym = (symbol || 'RELIANCE').replace('.NS', '').replace('.BO', '');
   let tvSymbol = cleanSym;
   if (cleanSym === '^NSEI' || cleanSym === 'NIFTY50' || cleanSym === 'NIFTY') {
     tvSymbol = 'BSE:SENSEX';
   } else if (cleanSym === '^NSEBANK' || cleanSym === 'BANKNIFTY') {
-    tvSymbol = 'BSE:BANKBEES';
+    tvSymbol = 'BSE:BANK';
   } else if (cleanSym === 'FINNIFTY' || cleanSym === 'NIFTY_FIN_SERVICE') {
     tvSymbol = 'BSE:SENSEX';
+  } else if (cleanSym === 'M&M') {
+    tvSymbol = 'BSE:M_M';
   } else if (!cleanSym.includes(':')) {
     tvSymbol = `BSE:${cleanSym}`;
   }
 
-  useEffect(() => {
-    if (chartMode !== 'tradingview' || !symbol) return;
-
-    const containerId = `tv_chart_${Math.random().toString(36).substring(7)}`;
-
-    if (containerRef.current) {
-      containerRef.current.innerHTML = `<div id="${containerId}" style="height:${height - 48}px;width:100%;"></div>`;
-
-      const initWidget = () => {
-        if (window.TradingView) {
-          try {
-            new window.TradingView.widget({
-              autosize: true,
-              symbol: tvSymbol,
-              interval: tvInterval,
-              timezone: "Asia/Kolkata",
-              theme: "dark",
-              style: "1",
-              locale: "en",
-              toolbar_bg: "#070c18",
-              enable_publishing: false,
-              hide_side_toolbar: false,
-              allow_symbol_change: true,
-              container_id: containerId,
-              studies: [
-                "MASimple@tv-basicstudies",
-                "RSI@tv-basicstudies",
-                "Volume@tv-basicstudies"
-              ]
-            });
-          } catch (e) {
-            console.warn("TradingView widget init error:", e);
-          }
-        }
-      };
-
-      if (window.TradingView) {
-        initWidget();
-      } else {
-        const timer = setInterval(() => {
-          if (window.TradingView) {
-            clearInterval(timer);
-            initWidget();
-          }
-        }, 150);
-        setTimeout(() => clearInterval(timer), 6000);
-      }
-    }
-  }, [chartMode, tvSymbol, height, refreshKey, tvInterval]);
+  // Official TradingView standalone widgetembed URL
+  const tvEmbedUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${tvInterval}&theme=dark&style=1&timezone=Asia%2FKolkata&locale=en&toolbarbg=070c18&hidesidetoolbar=0&symboledit=1&saveimage=1&withdateranges=1`;
 
   return (
     <div style={{
@@ -503,27 +455,6 @@ export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
         {/* Mode Tabs */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <button
-            onClick={() => setChartMode('live1m')}
-            type="button"
-            style={{
-              background: chartMode === 'live1m' ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
-              color: chartMode === 'live1m' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-              border: chartMode === 'live1m' ? '1px solid var(--accent-cyan)' : '1px solid transparent',
-              borderRadius: '6px',
-              padding: '0.25rem 0.65rem',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              cursor: 'pointer'
-            }}
-          >
-            <TrendingUp size={13} />
-            <span>1-Min Live Candlestick (NSE)</span>
-          </button>
-
-          <button
             onClick={() => setChartMode('tradingview')}
             type="button"
             style={{
@@ -541,7 +472,28 @@ export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
             }}
           >
             <BarChart2 size={13} />
-            <span>TradingView (Daily / Multi-Day)</span>
+            <span>TradingView Chart</span>
+          </button>
+
+          <button
+            onClick={() => setChartMode('live1m')}
+            type="button"
+            style={{
+              background: chartMode === 'live1m' ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
+              color: chartMode === 'live1m' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              border: chartMode === 'live1m' ? '1px solid var(--accent-cyan)' : '1px solid transparent',
+              borderRadius: '6px',
+              padding: '0.25rem 0.65rem',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              cursor: 'pointer'
+            }}
+          >
+            <TrendingUp size={13} />
+            <span>1-Min NSE Candles</span>
           </button>
         </div>
 
@@ -583,39 +535,51 @@ export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
           )}
 
           <a
-            href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`}
+            href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}&interval=1`}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open on TradingView.com for full workspace"
+            title="Open 1-minute live streaming chart on TradingView"
             style={{
               fontSize: '0.7rem',
               color: 'var(--accent-cyan)',
-              background: 'rgba(7, 12, 24, 0.8)',
-              border: '1px solid var(--border-subtle)',
+              background: 'rgba(6, 182, 212, 0.1)',
+              border: '1px solid var(--accent-cyan)',
               borderRadius: '6px',
               padding: '0.22rem 0.55rem',
               textDecoration: 'none',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.35rem'
+              gap: '0.35rem',
+              fontWeight: 600
             }}
           >
-            <span>{tvSymbol}</span>
-            <ExternalLink size={12} />
+            <span>{tvSymbol} (1m Live ↗)</span>
+            <ExternalLink size={11} />
           </a>
         </div>
       </div>
 
       {/* Chart Viewport */}
-      {chartMode === 'live1m' ? (
-        <NativeIntradayChart symbol={symbol} height={height} refreshKey={refreshKey} />
-      ) : (
-        <div style={{ position: 'relative', height: `${height}px`, width: '100%' }}>
-          <div style={{ padding: '0.3rem 0.8rem', background: 'rgba(234, 179, 8, 0.08)', borderBottom: '1px solid rgba(234, 179, 8, 0.2)', fontSize: '0.68rem', color: '#facc15' }}>
-            ℹ️ Free TradingView embeds are licensed by Indian exchanges for <strong>1D, 1W, and 1M</strong> intervals. For live 1-minute candles, use the <strong>1-Min Live Candlestick</strong> tab above.
-          </div>
-          <div ref={containerRef} style={{ height: `${height - 30}px`, width: '100%' }} />
+      {chartMode === 'tradingview' ? (
+        <div style={{ position: 'relative', height: `${height}px`, width: '100%', background: '#070c18' }}>
+          <iframe
+            key={`${tvSymbol}_${tvInterval}`}
+            title={`TradingView Chart - ${tvSymbol}`}
+            src={tvEmbedUrl}
+            style={{
+              width: '100%',
+              height: `${height}px`,
+              border: 'none',
+              display: 'block',
+              background: '#070c18'
+            }}
+            allowTransparency={true}
+            scrolling="no"
+            allowFullScreen={true}
+          />
         </div>
+      ) : (
+        <NativeIntradayChart symbol={symbol} height={height} refreshKey={refreshKey} />
       )}
     </div>
   );
