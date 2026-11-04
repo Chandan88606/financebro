@@ -246,28 +246,34 @@ export const api = {
               } catch (e) {}
             }
 
-            if (res && res.ok) {
-              const data = await res.json();
-              const meta = data?.chart?.result?.[0]?.meta;
-              if (meta && typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0) {
-                const price = Math.round(meta.regularMarketPrice * 100) / 100;
-                const prevClose = Math.round((meta.chartPreviousClose || meta.previousClose || price) * 100) / 100;
-                const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0.0;
-                const nowTime = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-                const quote = {
-                  ticker,
-                  symbol,
-                  price,
-                  prevClose,
-                  changePct,
-                  updatedAt: `${nowTime} (Live)`,
-                  timestamp: Date.now()
-                };
-
-                livePriceCache[ticker] = quote;
-                livePriceCache[symbol] = quote;
-              }
+            if (res && res.ok) {
+              try {
+                const text = await res.text();
+                const trimmed = (text || '').trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                  const data = JSON.parse(trimmed);
+                  const meta = data?.chart?.result?.[0]?.meta;
+                  if (meta && typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0) {
+                    const price = Math.round(meta.regularMarketPrice * 100) / 100;
+                    const prevClose = Math.round((meta.chartPreviousClose || meta.previousClose || price) * 100) / 100;
+                    const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0.0;
+                    const nowTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+                    const quote = {
+                      ticker,
+                      symbol,
+                      price,
+                      prevClose,
+                      changePct,
+                      updatedAt: `${nowTime} (Live)`,
+                      timestamp: Date.now()
+                    };
+
+                    livePriceCache[ticker] = quote;
+                    livePriceCache[symbol] = quote;
+                  }
+                }
+              } catch (parseErr) {}
             }
           } catch (err) {}
         }));
