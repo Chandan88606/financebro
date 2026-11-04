@@ -4,7 +4,7 @@
  */
 
 import { generateClientStockData, MASTER_NSE_STOCKS, DEFAULT_RULES } from './data/stocksData';
-import { generateAllFoSuggestions, buildStrategyInstance, FO_UNDERLYINGS, FO_STRATEGY_DEFINITIONS } from './data/optionsData';
+import { generateAllFoSuggestions, buildStrategyInstance, FO_UNDERLYINGS, FO_STRATEGY_DEFINITIONS, updateFoSpotPrices } from './data/optionsData';
 import { supabaseDb } from './supabase';
 
 const getApiBase = () => {
@@ -35,8 +35,24 @@ const STORAGE_KEYS = {
 
 const loadStorage = (key, fallback) => {
   try {
-    const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : fallback;
+    let val = null;
+    if (typeof localStorage !== 'undefined') {
+      val = localStorage.getItem(key);
+    }
+    if (!val && typeof sessionStorage !== 'undefined') {
+      val = sessionStorage.getItem(key);
+    }
+    if (!val) return fallback;
+    const parsed = JSON.parse(val);
+    if (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) {
+      return {
+        ...fallback,
+        ...parsed,
+        positions: Array.isArray(parsed?.positions) ? parsed.positions : (fallback.positions || []),
+        history: Array.isArray(parsed?.history) ? parsed.history : (fallback.history || [])
+      };
+    }
+    return parsed;
   } catch (e) {
     return fallback;
   }
@@ -44,7 +60,13 @@ const loadStorage = (key, fallback) => {
 
 const saveStorage = (key, data) => {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, serialized);
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(key, serialized);
+    }
   } catch (e) {
     // Ignore storage quota errors
   }
@@ -123,8 +145,12 @@ let localFoPositions = loadStorage(STORAGE_KEYS.FO_POSITIONS, []);
 let localFoHistory = loadStorage(STORAGE_KEYS.FO_HISTORY, []);
 
 let localLogs = loadStorage(STORAGE_KEYS.LOGS, [
-  `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. Real Market Mode active. Zero simulated fluctuations. Official NSE closing LTP enforced.`
+  `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. Real Market Mode active. Official NSE closing LTP & 1-minute silent live feed enabled.`
 ]);
+
+// Real-time live quotes memory cache with local persistence
+let livePriceCache = loadStorage('financebro_live_quotes', {});
+updateFoSpotPrices(livePriceCache);
 
 export const getIndianMarketStatus = () => {
   // IST is UTC + 5:30
@@ -185,6 +211,78 @@ export const api = {
     return getIndianMarketStatus();
   },
 
+  // 1-Minute Silent Real-time Quote Engine
+  fetchLiveQuotes: async (symbolsToFetch = null) => {
+    try {
+      const watchlistTickers = MASTER_NSE_STOCKS.map(s => s.ticker);
+      const foTickers = FO_UNDERLYINGS.map(u => u.ticker);
+      const holdingTickers = (localPortfolio?.positions || []).map(p => p.ticker);
+
+      const all = Array.from(new Set([...holdingTickers, ...foTickers, ...watchlistTickers]));
+      const symbols = symbolsToFetch || all;
+
+      // Parallel batch fetching
+      const BATCH_SIZE = 6;
+      for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+        const batch = symbols.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(batch.map(async (ticker) => {
+          const stockMeta = MASTER_NSE_STOCKS.find(s => s.ticker === ticker);
+          const foMeta = FO_UNDERLYINGS.find(u => u.ticker === ticker);
+          const symbol = stockMeta?.symbol || foMeta?.symbol || (ticker.startsWith('^') ? ticker : `${ticker}.NS`);
+
+          try {
+            let res = null;
+            // 1. Try Vite dev server proxy first (/api/yahoo)
+            try {
+              res = await fetch(`/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`, {
+                headers: { 'Accept': 'application/json' }
+              });
+            } catch (e) {}
+
+            // 2. Direct fallback
+            if (!res || !res.ok) {
+              try {
+                res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`);
+              } catch (e) {}
+            }
+
+            if (res && res.ok) {
+              const data = await res.json();
+              const meta = data?.chart?.result?.[0]?.meta;
+              if (meta && typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0) {
+                const price = Math.round(meta.regularMarketPrice * 100) / 100;
+                const prevClose = Math.round((meta.chartPreviousClose || meta.previousClose || price) * 100) / 100;
+                const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0.0;
+                const nowTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+                const quote = {
+                  ticker,
+                  symbol,
+                  price,
+                  prevClose,
+                  changePct,
+                  updatedAt: `${nowTime} (Live)`,
+                  timestamp: Date.now()
+                };
+
+                livePriceCache[ticker] = quote;
+                livePriceCache[symbol] = quote;
+              }
+            }
+          } catch (err) {}
+        }));
+      }
+
+      saveStorage('financebro_live_quotes', livePriceCache);
+      updateFoSpotPrices(livePriceCache);
+      return livePriceCache;
+    } catch (e) {
+      return livePriceCache;
+    }
+  },
+
+  getLiveQuotes: () => livePriceCache,
+
   getHealth: async () => {
     return {
       status: "online",
@@ -229,7 +327,7 @@ export const api = {
   },
 
   getStocks: async (params = {}) => {
-    const stocks = generateClientStockData(localRules);
+    const stocks = generateClientStockData(localRules, livePriceCache);
     let filtered = stocks;
 
     if (params.max_price != null && params.max_price > 0) {
@@ -253,13 +351,16 @@ export const api = {
   },
 
   getStockDetail: async (ticker) => {
-    const stocks = generateClientStockData(localRules);
+    const stocks = generateClientStockData(localRules, livePriceCache);
     const found = stocks.find(s => s.ticker.toUpperCase() === ticker.toUpperCase()) || stocks[0];
     return found;
   },
 
   getPortfolio: async () => {
-    const stocks = generateClientStockData(localRules);
+    localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+    if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
+    if (!Array.isArray(localPortfolio.history)) localPortfolio.history = [];
+    const stocks = generateClientStockData(localRules, livePriceCache);
     const stockMap = {};
     stocks.forEach(s => { stockMap[s.ticker] = s.current_price; });
 
@@ -307,6 +408,9 @@ export const api = {
   },
 
   executeOrder: async (order) => {
+    localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+    if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
+    if (!Array.isArray(localPortfolio.history)) localPortfolio.history = [];
     const { ticker, action, qty, price, exitReason, autoExited } = order;
     if (!qty || qty <= 0) throw new Error("Quantity must be greater than 0");
     if (!price || price <= 0) throw new Error("Price must be greater than 0");
@@ -445,8 +549,8 @@ export const api = {
       {
         ticker: "RELIANCE",
         qty: 15,
-        avg_price: 1148.00,
-        current_price: 1164.90,
+        avg_price: 1285.00,
+        current_price: 1306.20,
         invested: 17220.00,
         unrealized_pnl: 253.50,
         unrealized_pnl_pct: 1.47,
@@ -689,7 +793,8 @@ export const api = {
   // FUTURES & OPTIONS (F&O) DERIVATIVES APIS
   // ==========================================
   getFoSuggestions: async (dte = 4) => {
-    return generateAllFoSuggestions(dte);
+    updateFoSpotPrices(livePriceCache);
+    return generateAllFoSuggestions(dte, livePriceCache);
   },
 
   getFoPositions: async () => {

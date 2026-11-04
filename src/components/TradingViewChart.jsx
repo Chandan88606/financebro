@@ -1,18 +1,22 @@
 import React, { useEffect, useRef } from 'react';
 
-export default function TradingViewChart({ symbol, height = 480 }) {
+export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
     if (!symbol) return;
 
-    // Standardize symbol for TradingView (BSE / NSE)
+    // Standardize symbol for TradingView Indian Market (NSE priority)
     let cleanSym = symbol.replace('.NS', '').replace('.BO', '');
     let tvSymbol = cleanSym;
-    if (cleanSym === '^NSEI' || cleanSym === 'NIFTY50') {
+    if (cleanSym === '^NSEI' || cleanSym === 'NIFTY50' || cleanSym === 'NIFTY') {
       tvSymbol = 'NSE:NIFTY';
+    } else if (cleanSym === '^NSEBANK' || cleanSym === 'BANKNIFTY') {
+      tvSymbol = 'NSE:BANKNIFTY';
+    } else if (cleanSym === 'FINNIFTY' || cleanSym === 'NIFTY_FIN_SERVICE') {
+      tvSymbol = 'NSE:FINNIFTY';
     } else if (!cleanSym.includes(':')) {
-      tvSymbol = `BSE:${cleanSym}`;
+      tvSymbol = `NSE:${cleanSym}`;
     }
 
     const containerId = `tv_chart_${Math.random().toString(36).substring(7)}`;
@@ -46,7 +50,7 @@ export default function TradingViewChart({ symbol, height = 480 }) {
         }
       }
     }
-  }, [symbol, height]);
+  }, [symbol, height, refreshKey]);
 
   return (
     <div style={{

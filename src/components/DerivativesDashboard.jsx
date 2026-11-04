@@ -29,7 +29,8 @@ import { api } from '../api';
 export default function DerivativesDashboard({
   walletBalance,
   onRefreshWallet,
-  onAddLog
+  onAddLog,
+  refreshKey
 }) {
   // Strategy & Underlying selection
   const [selectedStrategyDefId, setSelectedStrategyDefId] = useState('BULL_PUT_SPREAD');
@@ -61,10 +62,16 @@ export default function DerivativesDashboard({
     setActiveStrategyInstance(instance);
   }, [selectedStrategyDefId, selectedUnderlyingTicker, dte]);
 
-  // Load active F&O positions
+  // Load active F&O positions and respond to 1-minute silent live refresh
   useEffect(() => {
     loadPositionsAndRules();
-  }, []);
+    const stratDef = FO_STRATEGY_DEFINITIONS.find(s => s.id === selectedStrategyDefId) || FO_STRATEGY_DEFINITIONS[0];
+    const underlying = FO_UNDERLYINGS.find(u => u.ticker === selectedUnderlyingTicker) || FO_UNDERLYINGS[0];
+    if (stratDef && underlying) {
+      const instance = buildStrategyInstance(stratDef, underlying, dte);
+      setActiveStrategyInstance(instance);
+    }
+  }, [refreshKey]);
 
   const loadPositionsAndRules = async () => {
     try {

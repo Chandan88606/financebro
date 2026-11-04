@@ -23,7 +23,15 @@ Thumbs.db
 *.log
 scratch/
 
+# Environment variables
+.env
+.env.local
+*.env
+frontend/.env
+
 # Node & Frontend Build
+package-lock.json
+*/package-lock.json
 node_modules/
 dist/
 .vite/

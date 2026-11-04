@@ -4,7 +4,7 @@
  */
 
 export const MASTER_NSE_STOCKS = [
-  { ticker: "RELIANCE", symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Retail", basePrice: 1164.90, prevClose: 1160.20, changePct: 0.41 },
+  { ticker: "RELIANCE", symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Retail", basePrice: 1306.20, prevClose: 1302.50, changePct: 0.28 },
   { ticker: "TCS", symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "IT Services", basePrice: 3840.00, prevClose: 3825.00, changePct: 0.39 },
   { ticker: "HDFCBANK", symbol: "HDFCBANK.NS", name: "HDFC Bank Ltd.", sector: "Banking", basePrice: 1690.00, prevClose: 1682.50, changePct: 0.45 },
   { ticker: "ICICIBANK", symbol: "ICICIBANK.NS", name: "ICICI Bank Ltd.", sector: "Banking", basePrice: 1220.00, prevClose: 1226.00, changePct: -0.49 },
@@ -91,15 +91,17 @@ export const DEFAULT_RULES = {
  * Generates technical consensus module evaluations strictly using real NSE closing prices (LTP).
  * No synthetic price drift, no random fluctuations, no data manipulation.
  */
-export function generateClientStockData(rules = {}) {
+export function generateClientStockData(rules = {}, livePriceMap = {}) {
   const buyThreshold = rules.consensus?.consensus_buy_threshold ?? 6;
   const toggles = rules.toggles || {};
   
   return MASTER_NSE_STOCKS.map((stock, i) => {
-    // Exact official closing price (LTP) without any synthetic fluctuation
-    const currentPrice = stock.basePrice;
-    const change = stock.changePct;
-    const netChange = Math.round((currentPrice - stock.prevClose) * 100) / 100;
+    // Real-time live quote integration with fallback to calibrated basePrice
+    const live = livePriceMap && (livePriceMap[stock.ticker] || livePriceMap[stock.symbol]);
+    const currentPrice = (live && typeof live.price === 'number' && live.price > 0) ? live.price : stock.basePrice;
+    const prevClose = (live && typeof live.prevClose === 'number' && live.prevClose > 0) ? live.prevClose : stock.prevClose;
+    const change = (live && typeof live.changePct === 'number') ? live.changePct : (prevClose > 0 ? Math.round(((currentPrice - prevClose) / prevClose) * 10000) / 100 : stock.changePct);
+    const netChange = Math.round((currentPrice - prevClose) * 100) / 100;
 
     // Deterministic technical evaluation based on real price action
     const baseHash = (stock.ticker.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) + i) % 10;
@@ -151,7 +153,7 @@ export function generateClientStockData(rules = {}) {
       module_details: moduleDetails,
       buy_signal: isBullish,
       fits_wallet: true,
-      last_updated: "NSE Official Close"
+      last_updated: (live && live.updatedAt) ? live.updatedAt : "NSE Official Close"
     };
   }).sort((a, b) => b.consensus_score - a.consensus_score);
 }

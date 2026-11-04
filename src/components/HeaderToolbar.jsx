@@ -35,7 +35,8 @@ export default function HeaderToolbar({
   marketStatus,
   simulationPaused,
   onToggleSimulation,
-  onOpenMarketInfo
+  onOpenMarketInfo,
+  secondsUntilRefresh = 60
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -151,6 +152,32 @@ export default function HeaderToolbar({
             <HelpCircle size={13} color={marketStatus.isOpen ? 'var(--accent-emerald)' : '#fca5a5'} style={{ opacity: 0.8 }} />
           </div>
         )}
+
+        {/* 1-Minute Silent Live Feed Indicator */}
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          borderRadius: 8,
+          padding: '0.35rem 0.65rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.45rem',
+          fontSize: '0.72rem',
+          color: 'var(--accent-emerald)',
+          cursor: 'default'
+        }} title="Real-time quotes, charts, and F&O underlyings silently refresh every 60 seconds">
+          <span style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: 'var(--accent-emerald)',
+            boxShadow: '0 0 6px var(--accent-emerald)',
+            display: 'inline-block'
+          }} />
+          <span className="mono" style={{ fontWeight: 600 }}>
+            Live Feed: {secondsUntilRefresh}s
+          </span>
+        </div>
 
         {/* Primary Screen Tabs with HashRouter Navigation */}
         <nav style={{

@@ -45,6 +45,10 @@ export default function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef(null);
 
+  // 1-Minute Silent Real-Time Live Quote & Chart Refresh State
+  const [chartRefreshKey, setChartRefreshKey] = useState(Date.now());
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(60);
+
   // Keep IST market clock updated every second
   useEffect(() => {
     const clockTimer = setInterval(() => {
@@ -52,6 +56,55 @@ export default function App() {
     }, 1000);
     return () => clearInterval(clockTimer);
   }, []);
+
+  // 1-Minute Autonomous Silent Refresh Engine (Real-Time Live Quotes & Charts)
+  useEffect(() => {
+    // Initial silent quote fetch
+    silentPriceRefresh();
+
+    // 60-Second silent refresh interval
+    const refreshTimer = setInterval(() => {
+      silentPriceRefresh();
+    }, 60000);
+
+    // 1-Second countdown for Live Header indicator
+    const countdownTimer = setInterval(() => {
+      setSecondsUntilRefresh(prev => (prev <= 1 ? 60 : prev - 1));
+    }, 1000);
+
+    return () => {
+      clearInterval(refreshTimer);
+      clearInterval(countdownTimer);
+    };
+  }, [rules]);
+
+  const silentPriceRefresh = async () => {
+    try {
+      // 1. Fetch real-time live quotes in the background
+      await api.fetchLiveQuotes();
+
+      // 2. Silently update stocks list with live prices
+      const stocksRes = await api.getStocks();
+      if (stocksRes.stocks) {
+        setStocks(stocksRes.stocks);
+      }
+
+      // 3. Mark-to-market portfolio update with live prices
+      await refreshPortfolio();
+
+      // 4. Update currently selected stock detail
+      if (selectedTicker) {
+        const detail = await api.getStockDetail(selectedTicker);
+        if (detail) setStockDetail(detail);
+      }
+
+      // 5. Silent refresh trigger for TradingView and F&O payoff charts
+      setChartRefreshKey(Date.now());
+      setSecondsUntilRefresh(60);
+    } catch (e) {
+      console.warn("Silent refresh warning:", e);
+    }
+  };
 
   // 1. Initial Data Fetch
   useEffect(() => {
@@ -353,6 +406,7 @@ export default function App() {
         foPositionsCount={foPositionsCount}
         marketStatus={marketStatus}
         onOpenMarketInfo={() => setIsMarketModalOpen(true)}
+        secondsUntilRefresh={secondsUntilRefresh}
       />
 
       {/* Main Grid Workspace with HashRouter Routes */}
@@ -509,6 +563,7 @@ export default function App() {
                       stockDetail={stockDetail}
                       onOpenTrade={handleOpenTrade}
                       walletBalance={walletBalance}
+                      refreshKey={chartRefreshKey}
                     />
 
                     <PortfolioLedger
@@ -542,6 +597,7 @@ export default function App() {
                   walletBalance={walletBalance}
                   onRefreshWallet={refreshPortfolio}
                   onAddLog={(log) => setLogs(prev => [...prev.slice(-150), log])}
+                  refreshKey={chartRefreshKey}
                 />
 
                 <TerminalLogs logs={logs} />

@@ -57,15 +57,15 @@ export const FO_UNDERLYINGS = [
     symbol: "RELIANCE.NS",
     name: "Reliance Industries Ltd.",
     type: "STOCK",
-    spotPrice: 1164.90,
+    spotPrice: 1306.20,
     lotSize: 250,
     strikeStep: 20,
     weeklyExpiryDay: "Monthly Last Thursday",
     iv: 22.4,
     ivPercentile: 74,
     marketBias: "HIGH_IV_PRE_EVENT",
-    support: 1120,
-    resistance: 1200,
+    support: 1260,
+    resistance: 1350,
     catalyst: "Q3 Results & Retail Spin-off Speculation"
   },
   {
@@ -514,8 +514,25 @@ export function buildStrategyInstance(strategyDef, underlying, dte = 4) {
   };
 }
 
+export function updateFoSpotPrices(livePriceMap = {}) {
+  if (!livePriceMap) return;
+  FO_UNDERLYINGS.forEach(u => {
+    const live = livePriceMap[u.ticker] || livePriceMap[u.symbol];
+    if (live && typeof live.price === 'number' && live.price > 0) {
+      u.spotPrice = live.price;
+      if (live.prevClose && live.prevClose > 0) {
+        u.prevClose = live.prevClose;
+        u.changePct = live.changePct;
+      }
+    }
+  });
+}
+
 // Generate all 10 strategic opportunities across the NSE universe
-export function generateAllFoSuggestions(dte = 4) {
+export function generateAllFoSuggestions(dte = 4, liveSpotMap = null) {
+  if (liveSpotMap) {
+    updateFoSpotPrices(liveSpotMap);
+  }
   const suggestions = [];
 
   // Match each of the 10 strategies with prime candidate underlying assets

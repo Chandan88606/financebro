@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+websockets
+pandas
+numpy
+yfinance
+ta
+pydantic
+python-multipart
