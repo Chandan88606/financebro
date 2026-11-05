@@ -1,11 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ExternalLink, TrendingUp, BarChart2 } from 'lucide-react';
+import { ExternalLink, TrendingUp, BarChart2, Maximize2, Minimize2 } from 'lucide-react';
 
 /**
  * TradingViewChart - Official TradingView Advanced Real-Time Chart
  * Embeds authentic candlestick chart for Indian equities (BSE dual-listing feed).
  */
-export default function TradingViewChart({ symbol, height = 650, refreshKey }) {
+export default function TradingViewChart({
+  symbol,
+  height = 800,
+  refreshKey,
+  isFullscreen = false,
+  onToggleFullscreen
+}) {
   const containerRef = useRef(null);
   const [tvInterval, setTvInterval] = useState('D'); // 'D', 'W', 'M'
 
@@ -73,12 +79,14 @@ export default function TradingViewChart({ symbol, height = 650, refreshKey }) {
   return (
     <div style={{
       width: '100%',
+      height: isFullscreen ? '100%' : 'auto',
       display: 'flex',
       flexDirection: 'column',
-      borderRadius: '12px',
+      borderRadius: isFullscreen ? '0' : '12px',
       overflow: 'hidden',
-      border: '1px solid var(--border-subtle)',
-      background: '#070c18'
+      border: isFullscreen ? 'none' : '1px solid var(--border-subtle)',
+      background: '#070c18',
+      flex: 1
     }}>
       {/* Top Header Controls */}
       <div style={{
@@ -133,36 +141,62 @@ export default function TradingViewChart({ symbol, height = 650, refreshKey }) {
           </div>
         </div>
 
-        {/* Right: 1-Minute Live Link to TradingView India */}
-        <a
-          href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}&interval=1`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open live 1-minute streaming chart directly on TradingView"
-          style={{
-            fontSize: '0.72rem',
-            color: 'var(--accent-cyan)',
-            background: 'rgba(6, 182, 212, 0.12)',
-            border: '1px solid var(--accent-cyan)',
-            borderRadius: '6px',
-            padding: '0.25rem 0.65rem',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            fontWeight: 700
-          }}
-        >
-          <span>⚡ Live 1m Stream on TradingView ↗</span>
-          <ExternalLink size={12} />
-        </a>
+        {/* Right: Fullscreen Toggle & 1-Minute Live Link to TradingView India */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              type="button"
+              title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Expand to Fullscreen Monitor'}
+              style={{
+                fontSize: '0.72rem',
+                color: isFullscreen ? '#fca5a5' : 'var(--accent-cyan)',
+                background: isFullscreen ? 'rgba(239, 68, 68, 0.2)' : 'rgba(6, 182, 212, 0.12)',
+                border: `1px solid ${isFullscreen ? '#ef4444' : 'var(--accent-cyan)'}`,
+                borderRadius: '6px',
+                padding: '0.25rem 0.65rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              {isFullscreen ? <Minimize2 size={12} color="#ef4444" /> : <Maximize2 size={12} />}
+              <span>{isFullscreen ? 'Exit Fullscreen' : '⛶ Fullscreen'}</span>
+            </button>
+          )}
+
+          <a
+            href={`https://in.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}&interval=1`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open live 1-minute streaming chart directly on TradingView"
+            style={{
+              fontSize: '0.72rem',
+              color: 'var(--accent-cyan)',
+              background: 'rgba(6, 182, 212, 0.12)',
+              border: '1px solid var(--accent-cyan)',
+              borderRadius: '6px',
+              padding: '0.25rem 0.65rem',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontWeight: 700
+            }}
+          >
+            <span>⚡ Live 1m Stream on TradingView ↗</span>
+            <ExternalLink size={12} />
+          </a>
+        </div>
       </div>
 
       {/* Official TradingView Chart Container */}
       <div 
         ref={containerRef} 
         className="tradingview-widget-container" 
-        style={{ width: '100%', height: `${height - 48}px`, background: '#070c18' }} 
+        style={{ width: '100%', height: `${height - 48}px`, background: '#070c18', flex: 1 }} 
       />
     </div>
   );

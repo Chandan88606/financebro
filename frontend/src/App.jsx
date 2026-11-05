@@ -591,6 +591,8 @@ export default function App() {
                       onOpenTrade={handleOpenTrade}
                       walletBalance={walletBalance}
                       refreshKey={chartRefreshKey}
+                      isWatchlistCollapsed={isWatchlistCollapsed}
+                      onToggleWatchlist={() => setIsWatchlistCollapsed(!isWatchlistCollapsed)}
                     />
 
                     <PortfolioLedger
