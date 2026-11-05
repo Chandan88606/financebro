@@ -246,6 +246,14 @@ export const api = {
               } catch (e) {}
             }
 
+            // 3. Browser CORS Proxy Fallback
+            if (!res || !res.ok) {
+              try {
+                const target = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
+                res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
+              } catch (e) {}
+            }
+
             if (res && res.ok) {
               try {
                 const text = await res.text();
