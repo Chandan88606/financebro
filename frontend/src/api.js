@@ -448,6 +448,7 @@ export const api = {
 
       localPortfolio.wallet_balance = Math.round((localPortfolio.wallet_balance - totalReq) * 100) / 100;
       localPortfolio.total_charges_paid = Math.round(((localPortfolio.total_charges_paid || 0) + totalCharges) * 100) / 100;
+      tradeRecord.closing_balance = localPortfolio.wallet_balance;
 
       const existing = localPortfolio.positions.find(p => p.ticker === ticker);
       if (existing) {
@@ -491,6 +492,7 @@ export const api = {
       localPortfolio.wallet_balance = Math.round((localPortfolio.wallet_balance + netProceeds) * 100) / 100;
       localPortfolio.realized_pnl = Math.round(((localPortfolio.realized_pnl || 0) + pnl) * 100) / 100;
       localPortfolio.total_charges_paid = Math.round(((localPortfolio.total_charges_paid || 0) + totalCharges) * 100) / 100;
+      tradeRecord.closing_balance = localPortfolio.wallet_balance;
 
       if (qty >= pos.qty) {
         localPortfolio.positions.splice(idx, 1);

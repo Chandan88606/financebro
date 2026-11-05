@@ -25,7 +25,7 @@ export default function App() {
 
   const [walletBalance, setWalletBalance] = useState(100000.0);
   const [filterAffordable, setFilterAffordable] = useState(false);
-  const [autoExit, setAutoExit] = useState(true);
+  const [autoExit, setAutoExit] = useState(false);
 
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
@@ -393,6 +393,8 @@ export default function App() {
       <HeaderToolbar
         currentScreen={isDerivatives ? 'OPTIONS' : 'EQUITY'}
         walletBalance={walletBalance}
+        totalEquity={portfolio?.total_equity ?? walletBalance}
+        holdingsValue={portfolio?.current_portfolio_value ?? 0}
         onResetWallet={handleResetPortfolio}
         onSeedDemo={handleSeedDemoPortfolio}
         filterAffordable={filterAffordable}

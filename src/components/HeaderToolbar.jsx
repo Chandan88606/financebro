@@ -21,6 +21,8 @@ export default function HeaderToolbar({
   currentScreen,
   onSelectScreen,
   walletBalance,
+  totalEquity = 100000.0,
+  holdingsValue = 0.0,
   onResetWallet,
   onSeedDemo,
   filterAffordable,

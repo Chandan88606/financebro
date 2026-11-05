@@ -33,12 +33,12 @@ export default function PortfolioLedger({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
         {/* Total Equity */}
         <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '0.75rem 1rem' }}>
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Portfolio Equity</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Real Closing Balance (Total Equity)</span>
           <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '0.2rem' }}>
             ₹{total_equity.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-            Cash: ₹{wallet_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            Available Cash: ₹{wallet_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </span>
         </div>
 
@@ -254,7 +254,8 @@ export default function PortfolioLedger({
                     <th style={{ padding: '0.5rem 0.75rem' }}>Price</th>
                     <th style={{ padding: '0.5rem 0.75rem' }}>Turnover</th>
                     <th style={{ padding: '0.5rem 0.75rem' }}>Fees</th>
-                    <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>P&L</th>
+                    <th style={{ padding: '0.5rem 0.75rem' }}>P&L</th>
+                    <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>Closing Balance</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -289,8 +290,11 @@ export default function PortfolioLedger({
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{t.price.toFixed(2)}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{t.turnover.toFixed(2)}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem', color: 'var(--accent-amber)' }}>₹{t.charges.toFixed(2)}</td>
-                        <td className="mono" style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 700, color: t.pnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
+                        <td className="mono" style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: t.pnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
                           {!isBuy ? `${t.pnl >= 0 ? '+' : ''}₹${t.pnl.toFixed(2)}` : '-'}
+                        </td>
+                        <td className="mono" style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 600, color: 'var(--text-main)' }}>
+                          ₹{(t.closing_balance ?? wallet_balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );
