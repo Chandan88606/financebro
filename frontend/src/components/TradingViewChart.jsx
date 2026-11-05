@@ -5,7 +5,7 @@ import { ExternalLink, TrendingUp, BarChart2 } from 'lucide-react';
  * TradingViewChart - Official TradingView Advanced Real-Time Chart
  * Embeds authentic candlestick chart for Indian equities (BSE dual-listing feed).
  */
-export default function TradingViewChart({ symbol, height = 480, refreshKey }) {
+export default function TradingViewChart({ symbol, height = 650, refreshKey }) {
   const containerRef = useRef(null);
   const [tvInterval, setTvInterval] = useState('D'); // 'D', 'W', 'M'
 

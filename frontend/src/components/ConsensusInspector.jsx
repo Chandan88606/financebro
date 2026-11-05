@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, LineChart, BarChart3, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, XCircle, LineChart, BarChart3, ShoppingBag, Maximize2, Minimize2 } from 'lucide-react';
 import TradingViewChart from './TradingViewChart';
 
 export default function ConsensusInspector({
@@ -8,7 +8,9 @@ export default function ConsensusInspector({
   walletBalance,
   refreshKey
 }) {
-  const [viewTab, setViewTab] = useState('chart'); // 'chart' or 'diagnosis'
+  const [viewTab, setViewTab] = useState('chart');
+  const [chartHeight, setChartHeight] = useState(650);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   if (!stockDetail) {
     return (
@@ -123,7 +125,7 @@ export default function ConsensusInspector({
 
       {/* Main View: Chart or 10-Module Diagnosis */}
       {viewTab === 'chart' ? (
-        <TradingViewChart symbol={symbol || `${ticker}.NS`} height={420} refreshKey={refreshKey} />
+        <TradingViewChart symbol={symbol || `${ticker}.NS`} height={isFullscreen ? 880 : chartHeight} refreshKey={refreshKey} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', minHeight: 420 }}>
           {/* Passed Modules */}
