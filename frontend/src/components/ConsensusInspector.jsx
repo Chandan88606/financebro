@@ -125,7 +125,7 @@ export default function ConsensusInspector({
 
       {/* Main View: Chart or 10-Module Diagnosis */}
       {viewTab === 'chart' ? (
-        <TradingViewChart symbol={symbol || `${ticker}.NS`} height={isFullscreen ? 880 : chartHeight} refreshKey={refreshKey} />
+        <TradingViewChart symbol={symbol || `${ticker}.NS`} height={isFullscreen ? (typeof window !== 'undefined' ? window.innerHeight - 90 : 920) : chartHeight} refreshKey={refreshKey} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', minHeight: 420 }}>
           {/* Passed Modules */}

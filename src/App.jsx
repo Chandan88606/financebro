@@ -26,6 +26,7 @@ export default function App() {
   const [walletBalance, setWalletBalance] = useState(100000.0);
   const [filterAffordable, setFilterAffordable] = useState(false);
   const [autoExit, setAutoExit] = useState(false);
+  const [isWatchlistCollapsed, setIsWatchlistCollapsed] = useState(false);
 
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
@@ -551,14 +552,38 @@ export default function App() {
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.25rem' }}>
-                  <Watchlist
-                    stocks={stocks}
-                    selectedTicker={selectedTicker}
-                    onSelectStock={handleSelectStock}
-                    walletBalance={walletBalance}
-                    filterAffordable={filterAffordable}
-                  />
+                <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'flex-start' }}>
+                  <button
+                    onClick={() => setIsWatchlistCollapsed(!isWatchlistCollapsed)}
+                    type="button"
+                    style={{
+                      background: isWatchlistCollapsed ? 'rgba(56, 189, 248, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+                      color: isWatchlistCollapsed ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 8,
+                      padding: '0.35rem 0.85rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem'
+                    }}
+                  >
+                    <span>{isWatchlistCollapsed ? '⇤ Show Watchlist Sidebar' : '⇥ Collapse Watchlist (Wide Chart Mode)'}</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isWatchlistCollapsed ? '1fr' : '360px 1fr', gap: '1.25rem' }}>
+                  {!isWatchlistCollapsed && (
+                    <Watchlist
+                      stocks={stocks}
+                      selectedTicker={selectedTicker}
+                      onSelectStock={handleSelectStock}
+                      walletBalance={walletBalance}
+                      filterAffordable={filterAffordable}
+                    />
+                  )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <ConsensusInspector
