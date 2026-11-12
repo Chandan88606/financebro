@@ -26,7 +26,7 @@ MASTER_NSE_STOCKS = [
     {"ticker": "HINDUNILVR", "symbol": "HINDUNILVR.NS", "name": "Hindustan Unilever", "sector": "FMCG"},
     {"ticker": "KOTAKBANK", "symbol": "KOTAKBANK.NS", "name": "Kotak Mahindra Bank", "sector": "Banking"},
     {"ticker": "AXISBANK", "symbol": "AXISBANK.NS", "name": "Axis Bank Ltd.", "sector": "Banking"},
-    {"ticker": "TATAMOTORS", "symbol": "TATAMOTORS.NS", "name": "Tata Motors Ltd.", "sector": "Automotive"},
+    {"ticker": "TATAMOTORS", "symbol": "TMCV.NS", "name": "Tata Motors Ltd.", "sector": "Automotive"},
     {"ticker": "MARUTI", "symbol": "MARUTI.NS", "name": "Maruti Suzuki India", "sector": "Automotive"},
     {"ticker": "SUNPHARMA", "symbol": "SUNPHARMA.NS", "name": "Sun Pharma Industries", "sector": "Pharma"},
     {"ticker": "TITAN", "symbol": "TITAN.NS", "name": "Titan Company Ltd.", "sector": "Consumer Goods"},
@@ -44,7 +44,7 @@ MASTER_NSE_STOCKS = [
     {"ticker": "ASIANPAINT", "symbol": "ASIANPAINT.NS", "name": "Asian Paints Ltd.", "sector": "Consumer Paints"},
     {"ticker": "BAJAJFINSV", "symbol": "BAJAJFINSV.NS", "name": "Bajaj Finserv Ltd.", "sector": "Financials"},
     {"ticker": "ULTRACEMCO", "symbol": "ULTRACEMCO.NS", "name": "UltraTech Cement", "sector": "Cement"},
-    {"ticker": "ZOMATO", "symbol": "ZOMATO.NS", "name": "Zomato Ltd.", "sector": "Consumer Tech"},
+    {"ticker": "ZOMATO", "symbol": "ETERNAL.NS", "name": "Zomato Ltd.", "sector": "Consumer Tech"},
     {"ticker": "JIOFIN", "symbol": "JIOFIN.NS", "name": "Jio Financial Services", "sector": "Financials"},
     {"ticker": "HAL", "symbol": "HAL.NS", "name": "Hindustan Aeronautics", "sector": "Defense / Aerospace"},
     {"ticker": "BEL", "symbol": "BEL.NS", "name": "Bharat Electronics", "sector": "Defense"},
@@ -57,10 +57,13 @@ MASTER_NSE_STOCKS = [
 
 NSE_DICT = {item["ticker"]: item for item in MASTER_NSE_STOCKS}
 
-# In-memory OHLCV cache
+# In-memory OHLCV cache (historical technical indicators) & short-TTL live quote cache
 CACHE_DF: Dict[str, pd.DataFrame] = {}
 CACHE_TIMESTAMP: Dict[str, float] = {}
-CACHE_TTL_SECONDS = 300  # 5 minutes
+CACHE_IS_LIVE: Dict[str, bool] = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes for 6mo daily indicators
+LIVE_QUOTE_CACHE: Dict[str, Dict[str, Any]] = {}
+LIVE_QUOTE_TTL_SECONDS = 5  # 5 seconds for live market LTP
 
 def generate_fallback_data(ticker: str, days: int = 120) -> pd.DataFrame:
     """
@@ -87,6 +90,45 @@ def generate_fallback_data(ticker: str, days: int = 120) -> pd.DataFrame:
     }, index=dates)
     return df
 
+def fetch_live_quote(symbol: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches real-time LTP and previous close with a 5-second cache via yfinance fast_info / 1m intraday.
+    """
+    now = time.time()
+    cached = LIVE_QUOTE_CACHE.get(symbol)
+    if cached and (now - cached.get("timestamp", 0) < LIVE_QUOTE_TTL_SECONDS):
+        return cached
+
+    try:
+        yf_ticker = yf.Ticker(symbol)
+        last_price = None
+        prev_close = None
+
+        try:
+            fi = yf_ticker.fast_info
+            last_price = getattr(fi, "last_price", None) or (fi.get("lastPrice") if hasattr(fi, "get") else None)
+            prev_close = getattr(fi, "previous_close", None) or (fi.get("previousClose") if hasattr(fi, "get") else None)
+        except Exception:
+            pass
+
+        if not last_price or float(last_price) <= 0:
+            intraday = yf_ticker.history(period="1d", interval="1m")
+            if intraday is not None and not intraday.empty:
+                last_price = float(intraday["Close"].dropna().iloc[-1])
+
+        if last_price and float(last_price) > 0:
+            quote = {
+                "price": float(last_price),
+                "prev_close": float(prev_close) if prev_close and float(prev_close) > 0 else None,
+                "timestamp": now,
+            }
+            LIVE_QUOTE_CACHE[symbol] = quote
+            return quote
+    except Exception as e:
+        print(f"yfinance live quote error for {symbol}: {e}")
+
+    return None
+
 def fetch_stock_data(symbol: str, ticker: str, period: str = "6mo", interval: str = "1d") -> pd.DataFrame:
     """
     Fetches real-time / historical OHLCV data from yfinance with fallback.
@@ -103,15 +145,14 @@ def fetch_stock_data(symbol: str, ticker: str, period: str = "6mo", interval: st
             df = sanitize_dataframe(df)
             CACHE_DF[cache_key] = df
             CACHE_TIMESTAMP[cache_key] = now
+            CACHE_IS_LIVE[cache_key] = True
             return df
     except Exception as e:
         print(f"yfinance fetch error for {symbol}: {e}")
 
-    # Fallback synthetic data
-    df = generate_fallback_data(ticker)
-    CACHE_DF[cache_key] = df
-    CACHE_TIMESTAMP[cache_key] = now
-    return df
+    # Return synthetic fallback un-cached so subsequent polls can recover live data
+    CACHE_IS_LIVE[cache_key] = False
+    return generate_fallback_data(ticker)
 
 def scan_single_stock(ticker: str) -> Dict[str, Any]:
     meta = NSE_DICT.get(ticker, {
@@ -124,7 +165,17 @@ def scan_single_stock(ticker: str) -> Dict[str, Any]:
     df = fetch_stock_data(meta["symbol"], ticker)
     consensus_res = evaluate_stock_consensus(df, custom_rules=state.rules)
 
-    current_price = float(df["Close"].iloc[-1]) if (df is not None and not df.empty) else 0.0
+    live_quote = fetch_live_quote(meta["symbol"])
+    cache_key = f"{ticker}_6mo_1d"
+    is_live = (live_quote is not None) or CACHE_IS_LIVE.get(cache_key, False)
+
+    if live_quote is not None:
+        current_price = float(live_quote["price"])
+    elif df is not None and not df.empty:
+        current_price = float(df["Close"].iloc[-1])
+    else:
+        current_price = 0.0
+
     score = consensus_res.get("score", 0)
     matrix = consensus_res.get("matrix", [])
     passed_modules = [m["id"] for m in matrix if m.get("passed")]
@@ -134,12 +185,13 @@ def scan_single_stock(ticker: str) -> Dict[str, Any]:
     buy_thresh = state.rules.get("consensus", {}).get("consensus_buy_threshold", 6)
     buy_signal = (score >= buy_thresh)
 
-    # Calculate 1-day change
+    # Calculate 1-day change using live previous close when available
     change_pct = 0.0
-    if len(df) >= 2:
+    prev_close = live_quote.get("prev_close") if live_quote else None
+    if (not prev_close or prev_close <= 0) and df is not None and len(df) >= 2:
         prev_close = float(df["Close"].iloc[-2])
-        if prev_close > 0:
-            change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
+    if prev_close and prev_close > 0:
+        change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
 
     return {
         "ticker": ticker,
@@ -155,6 +207,7 @@ def scan_single_stock(ticker: str) -> Dict[str, Any]:
         "failed_modules": failed_modules,
         "module_details": module_details,
         "buy_signal": buy_signal,
+        "is_live": is_live,
         "fits_wallet": (current_price <= state.wallet_balance and current_price > 0),
         "last_updated": datetime.datetime.now().strftime("%H:%M:%S")
     }

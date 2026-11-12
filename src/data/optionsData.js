@@ -102,8 +102,8 @@ export const FO_UNDERLYINGS = [
   },
   {
     ticker: "TATAMOTORS",
-    symbol: "TATAMOTORS.NS",
-    name: "Tata Motors Ltd.",
+    symbol: "TMCV.NS",
+    name: "Tata Motors Ltd. (TMCV)",
     type: "STOCK",
     spotPrice: 395.00,
     lotSize: 700,
@@ -112,24 +112,24 @@ export const FO_UNDERLYINGS = [
     iv: 28.5,
     ivPercentile: 82,
     marketBias: "BULLISH_BREAKOUT",
-    support: 820,
-    resistance: 870,
-    catalyst: "EV Margin Expansion & JLR Deliveries"
+    support: 370,
+    resistance: 480,
+    catalyst: "EV Margin Expansion & Commercial Vehicle Growth"
   },
   {
     ticker: "INFY",
     symbol: "INFY.NS",
     name: "Infosys Ltd.",
     type: "STOCK",
-    spotPrice: 1740.00,
+    spotPrice: 1167.40,
     lotSize: 400,
     strikeStep: 20,
     weeklyExpiryDay: "Monthly Last Thursday",
     iv: 21.0,
     ivPercentile: 58,
     marketBias: "BEARISH",
-    support: 1700,
-    resistance: 1780,
+    support: 1100,
+    resistance: 1220,
     catalyst: "Margin Compression in Europe"
   }
 ];

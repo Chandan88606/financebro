@@ -6,7 +6,9 @@ export default function Watchlist({
   selectedTicker,
   onSelectStock,
   walletBalance,
-  filterAffordable
+  filterAffordable,
+  marketStatus = null,
+  liveSyncStatus = null
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -36,9 +38,21 @@ export default function Watchlist({
             <span>NSE Watchlist</span>
             <span className="badge-tag badge-cyan">{filteredStocks.length}</span>
           </h3>
-          <span style={{ fontSize: '0.66rem', color: '#94a3b8', fontWeight: 600 }}>
-            Official NSE Closing LTP
-          </span>
+          {(() => {
+            const hasLivePrices = liveSyncStatus?.status === 'live' || filteredStocks.some(s => s.is_live);
+            const isFallback = liveSyncStatus?.status === 'fallback' && !hasLivePrices;
+            const badgeText = hasLivePrices
+              ? (marketStatus?.isOpen
+                  ? `LIVE NSE${liveSyncStatus?.lastSyncIst ? ` • ${liveSyncStatus.lastSyncIst}` : ''}`
+                  : `NSE Closing LTP${liveSyncStatus?.lastSyncIst ? ` • ${liveSyncStatus.lastSyncIst}` : ''}`)
+              : (isFallback ? 'Offline Fallback' : 'Syncing LTP...');
+            const badgeColor = hasLivePrices ? (marketStatus?.isOpen ? '#10b981' : '#94a3b8') : (isFallback ? '#f59e0b' : '#94a3b8');
+            return (
+              <span style={{ fontSize: '0.66rem', color: badgeColor, fontWeight: 600 }}>
+                {badgeText}
+              </span>
+            );
+          })()}
           {filterAffordable && (
             <span className="badge-tag badge-emerald" style={{ fontSize: '0.65rem' }}>
               Budget Mode ≤ ₹{Math.round(walletBalance).toLocaleString('en-IN')}

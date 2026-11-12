@@ -46,9 +46,19 @@ export default function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef(null);
 
-  // 1-Minute Silent Real-Time Live Quote & Chart Refresh State
+  // Real-Time Live Quote & Chart Refresh State (5s during NSE open, 30s when closed)
+  const getRefreshIntervalSec = () => (api.getMarketStatus().isOpen ? 5 : 30);
   const [chartRefreshKey, setChartRefreshKey] = useState(Date.now());
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(60);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(() => getRefreshIntervalSec());
+  const [liveSyncStatus, setLiveSyncStatus] = useState(() => api.getLiveSyncStatus());
+
+  const selectedTickerRef = useRef(selectedTicker);
+  const isRefreshingRef = useRef(false);
+  const countdownRef = useRef(getRefreshIntervalSec());
+
+  useEffect(() => {
+    selectedTickerRef.current = selectedTicker;
+  }, [selectedTicker]);
 
   // Keep IST market clock updated every second
   useEffect(() => {
@@ -58,54 +68,82 @@ export default function App() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // 1-Minute Autonomous Silent Refresh Engine (Real-Time Live Quotes & Charts)
-  useEffect(() => {
-    // Initial silent quote fetch
-    silentPriceRefresh();
-
-    // 60-Second silent refresh interval
-    const refreshTimer = setInterval(() => {
-      silentPriceRefresh();
-    }, 60000);
-
-    // 1-Second countdown for Live Header indicator
-    const countdownTimer = setInterval(() => {
-      setSecondsUntilRefresh(prev => (prev <= 1 ? 60 : prev - 1));
-    }, 1000);
-
-    return () => {
-      clearInterval(refreshTimer);
-      clearInterval(countdownTimer);
-    };
-  }, [rules]);
-
   const silentPriceRefresh = async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
-      // 1. Fetch real-time live quotes in the background
+      // 1. Fetch real-time live quotes in fast batches
       await api.fetchLiveQuotes();
+      setLiveSyncStatus({ ...api.getLiveSyncStatus() });
 
-      // 2. Silently update stocks list with live prices
+      // 2. Update stocks list with live prices
       const stocksRes = await api.getStocks();
       if (stocksRes.stocks) {
         setStocks(stocksRes.stocks);
+        setTradeModal(prev => {
+          if (!prev.isOpen) return prev;
+          const match = stocksRes.stocks.find(s => s.ticker === prev.ticker);
+          return match && match.current_price !== prev.price
+            ? { ...prev, price: match.current_price }
+            : prev;
+        });
       }
 
       // 3. Mark-to-market portfolio update with live prices
       await refreshPortfolio();
 
-      // 4. Update currently selected stock detail
-      if (selectedTicker) {
-        const detail = await api.getStockDetail(selectedTicker);
-        if (detail) setStockDetail(detail);
+      // 4. Update currently selected stock detail (using ref to avoid stale closure)
+      const activeTicker = selectedTickerRef.current;
+      if (activeTicker) {
+        const detail = await api.getStockDetail(activeTicker);
+        if (detail && selectedTickerRef.current === activeTicker) {
+          setStockDetail(detail);
+        }
       }
 
-      // 5. Silent refresh trigger for TradingView and F&O payoff charts
+      // 5. Refresh trigger for F&O payoff curves
       setChartRefreshKey(Date.now());
-      setSecondsUntilRefresh(60);
     } catch (e) {
       console.warn("Silent refresh warning:", e);
+    } finally {
+      const nextSec = getRefreshIntervalSec();
+      countdownRef.current = nextSec;
+      setSecondsUntilRefresh(nextSec);
+      isRefreshingRef.current = false;
     }
   };
+
+  // Real-Time Autonomous Refresh Engine (5s when NSE is open, 30s when closed)
+  useEffect(() => {
+    silentPriceRefresh();
+
+    const tickTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isRefreshingRef.current) return;
+      countdownRef.current -= 1;
+      if (countdownRef.current <= 0) {
+        silentPriceRefresh();
+      } else {
+        setSecondsUntilRefresh(countdownRef.current);
+      }
+    }, 1000);
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        silentPriceRefresh();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      clearInterval(tickTimer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
+  }, []);
 
   // 1. Initial Data Fetch
   useEffect(() => {
@@ -139,10 +177,13 @@ export default function App() {
       setLogs(logsRes.logs || []);
       setFoPositionsCount(foPosRes ? foPosRes.length : 0);
 
-      if (stocksRes.stocks && stocksRes.stocks.length > 0) {
+      if (stocksRes.stocks && stocksRes.stocks.length > 0 && !selectedTickerRef.current) {
         const initial = stocksRes.stocks[0].ticker;
+        selectedTickerRef.current = initial;
         setSelectedTicker(initial);
         loadStockDetail(initial);
+      } else if (selectedTickerRef.current) {
+        loadStockDetail(selectedTickerRef.current);
       }
     } catch (err) {
       console.error("Initialization error:", err);
@@ -299,20 +340,38 @@ export default function App() {
     }
   };
 
-  const handleSelectStock = (ticker) => {
+  const handleSelectStock = async (ticker) => {
+    selectedTickerRef.current = ticker;
     setSelectedTicker(ticker);
-    loadStockDetail(ticker);
+    await loadStockDetail(ticker);
+
+    // Fetch immediate fresh quote for selected stock when market is open or quote isn't live
+    const fresh = await api.fetchSingleQuote(ticker);
+    if (fresh && selectedTickerRef.current === ticker) {
+      const detail = await api.getStockDetail(ticker);
+      if (detail && selectedTickerRef.current === ticker) {
+        setStockDetail(detail);
+      }
+      const res = await api.getStocks();
+      if (res.stocks) setStocks(res.stocks);
+    }
   };
 
   const refreshStocks = async () => {
     setLoadingStocks(true);
     try {
+      await api.fetchLiveQuotes();
+      setLiveSyncStatus({ ...api.getLiveSyncStatus() });
       const res = await api.getStocks();
       setStocks(res.stocks || []);
-      if (selectedTicker) {
-        loadStockDetail(selectedTicker);
+      const active = selectedTickerRef.current;
+      if (active) {
+        await loadStockDetail(active);
       }
-      refreshPortfolio();
+      await refreshPortfolio();
+      const nextSec = getRefreshIntervalSec();
+      countdownRef.current = nextSec;
+      setSecondsUntilRefresh(nextSec);
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
@@ -410,6 +469,7 @@ export default function App() {
         marketStatus={marketStatus}
         onOpenMarketInfo={() => setIsMarketModalOpen(true)}
         secondsUntilRefresh={secondsUntilRefresh}
+        liveSyncStatus={liveSyncStatus}
       />
 
       {/* Main Grid Workspace with HashRouter Routes */}
@@ -459,7 +519,7 @@ export default function App() {
                   </span>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: '#e2e8f0', marginTop: 3 }}>
-                  Market is closed. Showing authentic official closing prices (e.g. <strong>RELIANCE ₹1,164.90</strong>, <strong>NIFTY 50 23,053.10</strong>). Zero demo fluctuations or synthetic drift. Next session opens <strong>{marketStatus.nextOpenText}</strong>.
+                  Market is closed. Showing official NSE closing prices{(() => { const rel = stocks.find((s) => s.ticker === 'RELIANCE'); const hdf = stocks.find((s) => s.ticker === 'HDFCBANK'); return rel ? <> (e.g. <strong>RELIANCE ₹{rel.current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>{hdf ? <>, <strong>HDFCBANK ₹{hdf.current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></> : null})</> : null; })()}. Zero demo fluctuations or synthetic drift. Next session opens <strong>{marketStatus.nextOpenText}</strong>.
                 </div>
               </div>
             </div>
@@ -582,6 +642,8 @@ export default function App() {
                       onSelectStock={handleSelectStock}
                       walletBalance={walletBalance}
                       filterAffordable={filterAffordable}
+                      marketStatus={marketStatus}
+                      liveSyncStatus={liveSyncStatus}
                     />
                   )}
 

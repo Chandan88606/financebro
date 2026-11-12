@@ -54,7 +54,9 @@ export default function ConsensusInspector({
     passed_modules = [],
     failed_modules = [],
     module_details = {},
-    buy_signal
+    buy_signal,
+    last_updated,
+    is_live
   } = stockDetail;
 
   const isPositive = change_pct >= 0;
@@ -118,8 +120,16 @@ export default function ConsensusInspector({
             <span className="mono" style={{ fontSize: '1.35rem', fontWeight: 800 }}>
               ₹{current_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
-            <span style={{ fontSize: '0.68rem', color: '#94a3b8', background: 'rgba(30, 41, 59, 0.8)', padding: '0.15rem 0.45rem', borderRadius: 6, border: '1px solid var(--border-subtle)', fontWeight: 600 }}>
-              Official NSE LTP
+            <span style={{
+              fontSize: '0.68rem',
+              color: is_live ? '#10b981' : '#f59e0b',
+              background: is_live ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+              padding: '0.15rem 0.45rem',
+              borderRadius: 6,
+              border: `1px solid ${is_live ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+              fontWeight: 600
+            }}>
+              {last_updated ? `NSE LTP • ${last_updated}` : 'NSE LTP (Fallback)'}
             </span>
             <span className="mono" style={{
               fontSize: '0.88rem',

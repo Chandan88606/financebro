@@ -38,7 +38,8 @@ export default function HeaderToolbar({
   simulationPaused,
   onToggleSimulation,
   onOpenMarketInfo,
-  secondsUntilRefresh = 60
+  secondsUntilRefresh = 60,
+  liveSyncStatus = null
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,8 +69,17 @@ export default function HeaderToolbar({
     }
   };
 
-  const isOnline = wsConnected || IS_STANDALONE;
-  const statusLabel = IS_STANDALONE ? 'LIVE FEED (ACTIVE)' : (wsConnected ? 'LIVE FEED ACTIVE' : 'CONNECTING...');
+  const syncState = liveSyncStatus?.status;
+  const isFeedLive = IS_STANDALONE ? syncState === 'live' : (wsConnected || syncState === 'live');
+  const isFallback = syncState === 'fallback';
+  const isOnline = isFeedLive;
+  const statusLabel = IS_STANDALONE
+    ? (syncState === 'live'
+        ? (marketStatus?.isClosed ? 'NSE CLOSE SYNCED' : 'LIVE FEED (ACTIVE)')
+        : (isFallback ? 'FEED OFFLINE (FALLBACK)' : 'SYNCING LIVE QUOTES...'))
+    : (isOnline ? 'LIVE FEED ACTIVE' : 'CONNECTING...');
+  const statusColor = isOnline ? 'var(--accent-emerald)' : (isFallback ? '#f59e0b' : 'var(--text-muted)');
+  const dotColor = isOnline ? 'var(--accent-emerald)' : (isFallback ? '#f59e0b' : 'var(--text-dim)');
 
   return (
     <header className="header-bar">
@@ -98,10 +108,10 @@ export default function HeaderToolbar({
                 width: 7,
                 height: 7,
                 borderRadius: '50%',
-                backgroundColor: isOnline ? 'var(--accent-emerald)' : 'var(--text-dim)',
+                backgroundColor: dotColor,
                 display: 'inline-block'
               }} />
-              <span style={{ fontSize: '0.7rem', color: isOnline ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.7rem', color: statusColor }}>
                 {statusLabel}
               </span>
             </div>
@@ -155,29 +165,31 @@ export default function HeaderToolbar({
           </div>
         )}
 
-        {/* 1-Minute Silent Live Feed Indicator */}
+        {/* Real-Time Feed Refresh Countdown */}
         <div style={{
-          background: 'rgba(16, 185, 129, 0.08)',
-          border: '1px solid rgba(16, 185, 129, 0.25)',
+          background: isOnline ? 'rgba(16, 185, 129, 0.08)' : (isFallback ? 'rgba(245, 158, 11, 0.1)' : 'rgba(148, 163, 184, 0.08)'),
+          border: `1px solid ${isOnline ? 'rgba(16, 185, 129, 0.25)' : (isFallback ? 'rgba(245, 158, 11, 0.35)' : 'rgba(148, 163, 184, 0.25)')}`,
           borderRadius: 8,
           padding: '0.35rem 0.65rem',
           display: 'flex',
           alignItems: 'center',
           gap: '0.45rem',
           fontSize: '0.72rem',
-          color: 'var(--accent-emerald)',
+          color: statusColor,
           cursor: 'default'
-        }} title="Real-time quotes, charts, and F&O underlyings silently refresh every 60 seconds">
+        }} title="Live NSE quotes and F&O spot prices refresh every 5s during market hours (30s when closed)">
           <span style={{
             width: 7,
             height: 7,
             borderRadius: '50%',
-            background: 'var(--accent-emerald)',
-            boxShadow: '0 0 6px var(--accent-emerald)',
+            background: dotColor,
+            boxShadow: isOnline ? '0 0 6px var(--accent-emerald)' : 'none',
             display: 'inline-block'
           }} />
           <span className="mono" style={{ fontWeight: 600 }}>
-            Live Feed: {secondsUntilRefresh}s
+            {isOnline
+              ? (marketStatus?.isClosed ? `Close Sync: ${secondsUntilRefresh}s` : `Live Feed: ${secondsUntilRefresh}s`)
+              : (isFallback ? `Retry Sync: ${secondsUntilRefresh}s` : `Syncing: ${secondsUntilRefresh}s`)}
           </span>
         </div>
 

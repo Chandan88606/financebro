@@ -148,9 +148,133 @@ let localLogs = loadStorage(STORAGE_KEYS.LOGS, [
   `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. Real Market Mode active. Official NSE closing LTP & 1-minute silent live feed enabled.`
 ]);
 
+const formatIstTime = (ts = Date.now()) => {
+  try {
+    return new Date(ts).toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  } catch (e) {
+    return new Date(ts).toLocaleTimeString('en-US', { hour12: false });
+  }
+};
+
 // Real-time live quotes memory cache with local persistence
-let livePriceCache = loadStorage('financebro_live_quotes', {});
+const rawCachedQuotes = loadStorage('financebro_live_quotes', {});
+let livePriceCache = {};
+if (rawCachedQuotes && typeof rawCachedQuotes === 'object') {
+  const nowMs = Date.now();
+  Object.entries(rawCachedQuotes).forEach(([k, q]) => {
+    if (q && typeof q.price === 'number' && q.price > 0) {
+      const isFresh = q.timestamp && (nowMs - q.timestamp) < 120000;
+      livePriceCache[k] = {
+        ...q,
+        isLive: isFresh,
+        updatedAt: isFresh ? q.updatedAt : `Cached ${formatIstTime(q.timestamp || nowMs)}`
+      };
+    }
+  });
+}
 updateFoSpotPrices(livePriceCache);
+
+let liveSyncStatus = {
+  status: 'syncing',
+  isLive: false,
+  updatedCount: 0,
+  totalCount: 0,
+  lastSyncAt: null,
+  lastSyncIst: null,
+  source: 'Connecting...'
+};
+
+const fetchYahooJson = async (pathAndQuery) => {
+  const sep = pathAndQuery.includes('?') ? '&' : '?';
+  const busted = `${pathAndQuery}${sep}_t=${Date.now()}`;
+  const candidates = [
+    `/api/yahoo${busted}`,
+    `/api/yahoo2${busted}`,
+    `https://query1.finance.yahoo.com${busted}`,
+    `https://query2.finance.yahoo.com${busted}`
+  ];
+
+  for (const url of candidates) {
+    try {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 7000) : null;
+      const res = await fetch(url, {
+        cache: 'no-store',
+        signal: controller?.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      if (timer) clearTimeout(timer);
+      if (!res || !res.ok) continue;
+
+      const text = await res.text();
+      const trimmed = (text || '').trim();
+      // Reject HTML SPA fallback responses (e.g. index.html served with HTTP 200)
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) continue;
+
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      // Try next endpoint
+    }
+  }
+  return null;
+};
+
+const resolveTickersForSymbol = (symbol) => {
+  const tickers = new Set();
+  MASTER_NSE_STOCKS.forEach(s => {
+    if (s.symbol === symbol) tickers.add(s.ticker);
+  });
+  FO_UNDERLYINGS.forEach(u => {
+    if (u.symbol === symbol) tickers.add(u.ticker);
+  });
+  return Array.from(tickers);
+};
+
+const resolveSymbolForTicker = (ticker) => {
+  const stockMeta = MASTER_NSE_STOCKS.find(s => s.ticker === ticker);
+  const foMeta = FO_UNDERLYINGS.find(u => u.ticker === ticker);
+  return stockMeta?.symbol || foMeta?.symbol || (ticker.startsWith('^') ? ticker : `${ticker}.NS`);
+};
+
+const storeQuote = (symbol, rawPrice, rawPrevClose, marketTimeSec = null, fallbackTickers = []) => {
+  if (typeof rawPrice !== 'number' || !Number.isFinite(rawPrice) || rawPrice <= 0) return false;
+  const price = Math.round(rawPrice * 100) / 100;
+  const prevClose = (typeof rawPrevClose === 'number' && Number.isFinite(rawPrevClose) && rawPrevClose > 0)
+    ? Math.round(rawPrevClose * 100) / 100
+    : price;
+  const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0.0;
+  const marketTimeMs = (typeof marketTimeSec === 'number' && marketTimeSec > 0) ? marketTimeSec * 1000 : Date.now();
+  const timeStr = formatIstTime(marketTimeMs);
+  const marketOpen = getIndianMarketStatus().isOpen;
+
+  const tickers = Array.from(new Set([...fallbackTickers, ...resolveTickersForSymbol(symbol)]));
+  const quote = {
+    ticker: tickers[0] || symbol,
+    symbol,
+    price,
+    prevClose,
+    changePct,
+    isLive: true,
+    updatedAt: `${timeStr} (${marketOpen ? 'Live' : 'Close'})`,
+    marketTime: marketTimeMs,
+    timestamp: Date.now()
+  };
+
+  livePriceCache[symbol] = quote;
+  tickers.forEach(t => {
+    livePriceCache[t] = { ...quote, ticker: t };
+  });
+  return true;
+};
 
 export const getIndianMarketStatus = () => {
   // IST is UTC + 5:30
@@ -211,88 +335,130 @@ export const api = {
     return getIndianMarketStatus();
   },
 
-  // 1-Minute Silent Real-time Quote Engine
+  getLiveSyncStatus: () => liveSyncStatus,
+
+  // Real-Time Batch Live Quote Engine (Yahoo Spark + Chart Fallback)
   fetchLiveQuotes: async (symbolsToFetch = null) => {
     try {
       const watchlistTickers = MASTER_NSE_STOCKS.map(s => s.ticker);
       const foTickers = FO_UNDERLYINGS.map(u => u.ticker);
       const holdingTickers = (localPortfolio?.positions || []).map(p => p.ticker);
 
-      const all = Array.from(new Set([...holdingTickers, ...foTickers, ...watchlistTickers]));
-      const symbols = symbolsToFetch || all;
+      const allTickers = symbolsToFetch || Array.from(new Set([...holdingTickers, ...foTickers, ...watchlistTickers]));
+      const symbolToTickers = new Map();
+      allTickers.forEach(t => {
+        const sym = resolveSymbolForTicker(t);
+        if (!symbolToTickers.has(sym)) symbolToTickers.set(sym, []);
+        symbolToTickers.get(sym).push(t);
+      });
 
-      // Parallel batch fetching
-      const BATCH_SIZE = 6;
-      for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-        const batch = symbols.slice(i, i + BATCH_SIZE);
-        await Promise.allSettled(batch.map(async (ticker) => {
-          const stockMeta = MASTER_NSE_STOCKS.find(s => s.ticker === ticker);
-          const foMeta = FO_UNDERLYINGS.find(u => u.ticker === ticker);
-          const symbol = stockMeta?.symbol || foMeta?.symbol || (ticker.startsWith('^') ? ticker : `${ticker}.NS`);
+      const uniqueSymbols = Array.from(symbolToTickers.keys());
+      let updatedCount = 0;
+      const missingSymbols = [];
 
-          try {
-            let res = null;
-            // 1. Try Vite dev server proxy first (/api/yahoo)
-            try {
-              res = await fetch(`/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`, {
-                headers: { 'Accept': 'application/json' }
-              });
-            } catch (e) {}
-
-            // 2. Direct fallback
-            if (!res || !res.ok) {
-              try {
-                res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`);
-              } catch (e) {}
-            }
-
-            // 3. Browser CORS Proxy Fallback
-            if (!res || !res.ok) {
-              try {
-                const target = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
-                res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
-              } catch (e) {}
-            }
-
-            if (res && res.ok) {
-              try {
-                const text = await res.text();
-                const trimmed = (text || '').trim();
-                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                  const data = JSON.parse(trimmed);
-                  const meta = data?.chart?.result?.[0]?.meta;
-                  if (meta && typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0) {
-                    const price = Math.round(meta.regularMarketPrice * 100) / 100;
-                    const prevClose = Math.round((meta.chartPreviousClose || meta.previousClose || price) * 100) / 100;
-                    const changePct = prevClose > 0 ? Math.round(((price - prevClose) / prevClose) * 10000) / 100 : 0.0;
-                    const nowTime = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-                    const quote = {
-                      ticker,
-                      symbol,
-                      price,
-                      prevClose,
-                      changePct,
-                      updatedAt: `${nowTime} (Live)`,
-                      timestamp: Date.now()
-                    };
-
-                    livePriceCache[ticker] = quote;
-                    livePriceCache[symbol] = quote;
-                  }
-                }
-              } catch (parseErr) {}
-            }
-          } catch (err) {}
-        }));
+      // 1. Fast batch fetch via Yahoo Finance Spark (20 symbols per HTTP request)
+      const SPARK_BATCH = 20;
+      const chunks = [];
+      for (let i = 0; i < uniqueSymbols.length; i += SPARK_BATCH) {
+        chunks.push(uniqueSymbols.slice(i, i + SPARK_BATCH));
       }
 
-      saveStorage('financebro_live_quotes', livePriceCache);
-      updateFoSpotPrices(livePriceCache);
+      await Promise.allSettled(chunks.map(async (chunk) => {
+        const data = await fetchYahooJson(
+          `/v8/finance/spark?symbols=${encodeURIComponent(chunk.join(','))}&range=1d&interval=1m`
+        );
+        chunk.forEach(sym => {
+          const entry = data?.[sym];
+          const closes = Array.isArray(entry?.close) ? entry.close.filter(v => typeof v === 'number' && Number.isFinite(v) && v > 0) : [];
+          const rawPrice = (typeof entry?.fulldayPrice === 'number' && entry.fulldayPrice > 0)
+            ? entry.fulldayPrice
+            : closes[closes.length - 1];
+          const rawPrev = entry?.previousClose || entry?.chartPreviousClose || rawPrice;
+          const lastTs = Array.isArray(entry?.timestamp) ? entry.timestamp[entry.timestamp.length - 1] : null;
+
+          if (storeQuote(sym, rawPrice, rawPrev, lastTs, symbolToTickers.get(sym) || [])) {
+            updatedCount++;
+          } else {
+            missingSymbols.push(sym);
+          }
+        });
+      }));
+
+      // 2. Fallback to v8/finance/chart for any symbol missed by Spark
+      if (missingSymbols.length > 0) {
+        const CHART_BATCH = 6;
+        for (let i = 0; i < missingSymbols.length; i += CHART_BATCH) {
+          const batch = missingSymbols.slice(i, i + CHART_BATCH);
+          await Promise.allSettled(batch.map(async (sym) => {
+            const data = await fetchYahooJson(
+              `/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d`
+            );
+            const meta = data?.chart?.result?.[0]?.meta;
+            if (meta && storeQuote(
+              sym,
+              meta.regularMarketPrice,
+              meta.chartPreviousClose || meta.previousClose,
+              meta.regularMarketTime,
+              symbolToTickers.get(sym) || []
+            )) {
+              updatedCount++;
+            }
+          }));
+        }
+      }
+
+      const market = getIndianMarketStatus();
+      if (updatedCount > 0) {
+        liveSyncStatus = {
+          status: 'live',
+          isLive: true,
+          updatedCount,
+          totalCount: uniqueSymbols.length,
+          lastSyncAt: Date.now(),
+          lastSyncIst: formatIstTime(Date.now()),
+          source: market.isOpen ? 'NSE Live Feed' : 'NSE Official Close'
+        };
+        saveStorage('financebro_live_quotes', livePriceCache);
+        updateFoSpotPrices(livePriceCache);
+      } else {
+        // Mark existing cache as non-live fallback if network sync failed completely
+        Object.keys(livePriceCache).forEach(k => {
+          if (livePriceCache[k]) livePriceCache[k].isLive = false;
+        });
+        liveSyncStatus = {
+          status: 'fallback',
+          isLive: false,
+          updatedCount: 0,
+          totalCount: uniqueSymbols.length,
+          lastSyncAt: liveSyncStatus.lastSyncAt,
+          lastSyncIst: liveSyncStatus.lastSyncIst,
+          source: 'Offline / Static Fallback'
+        };
+      }
+
       return livePriceCache;
     } catch (e) {
+      liveSyncStatus = {
+        ...liveSyncStatus,
+        status: 'fallback',
+        isLive: false,
+        source: 'Offline / Static Fallback'
+      };
       return livePriceCache;
     }
+  },
+
+  fetchSingleQuote: async (ticker) => {
+    if (!ticker) return null;
+    const sym = resolveSymbolForTicker(ticker);
+    const data = await fetchYahooJson(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d`);
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (meta && storeQuote(sym, meta.regularMarketPrice, meta.chartPreviousClose || meta.previousClose, meta.regularMarketTime, [ticker])) {
+      saveStorage('financebro_live_quotes', livePriceCache);
+      updateFoSpotPrices(livePriceCache);
+      return livePriceCache[ticker] || livePriceCache[sym];
+    }
+    return null;
   },
 
   getLiveQuotes: () => livePriceCache,

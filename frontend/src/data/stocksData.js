@@ -98,9 +98,10 @@ export function generateClientStockData(rules = {}, livePriceMap = {}) {
   return MASTER_NSE_STOCKS.map((stock, i) => {
     // Real-time live quote integration with fallback to accurately calibrated real market closing price
     const live = livePriceMap && (livePriceMap[stock.ticker] || livePriceMap[stock.symbol]);
-    const currentPrice = (live && typeof live.price === 'number' && live.price > 0) ? live.price : stock.basePrice;
-    const prevClose = (live && typeof live.prevClose === 'number' && live.prevClose > 0) ? live.prevClose : stock.prevClose;
-    const change = (live && typeof live.changePct === 'number') ? live.changePct : (prevClose > 0 ? Math.round(((currentPrice - prevClose) / prevClose) * 10000) / 100 : stock.changePct);
+    const hasLive = !!(live && typeof live.price === 'number' && live.price > 0);
+    const currentPrice = hasLive ? live.price : stock.basePrice;
+    const prevClose = (hasLive && typeof live.prevClose === 'number' && live.prevClose > 0) ? live.prevClose : stock.prevClose;
+    const change = (hasLive && typeof live.changePct === 'number') ? live.changePct : (prevClose > 0 ? Math.round(((currentPrice - prevClose) / prevClose) * 10000) / 100 : stock.changePct);
     const netChange = Math.round((currentPrice - prevClose) * 100) / 100;
 
     // Deterministic technical evaluation based on real price action
@@ -153,7 +154,9 @@ export function generateClientStockData(rules = {}, livePriceMap = {}) {
       module_details: moduleDetails,
       buy_signal: isBullish,
       fits_wallet: true,
-      last_updated: (live && live.updatedAt) ? live.updatedAt : "NSE Official Close"
+      is_live: !!(hasLive && live.isLive !== false),
+      quote_timestamp: live?.timestamp || null,
+      last_updated: (hasLive && live.updatedAt) ? live.updatedAt : "Static Fallback (Sync Pending)"
     };
   }).sort((a, b) => b.consensus_score - a.consensus_score);
 }

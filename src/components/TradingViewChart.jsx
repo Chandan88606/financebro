@@ -15,15 +15,19 @@ export default function TradingViewChart({
   const containerRef = useRef(null);
   const [tvInterval, setTvInterval] = useState('D'); // 'D', 'W', 'M'
 
-  // Standardize Indian stock symbol for TradingView
+  // Standardize Indian stock symbol for TradingView (BSE feed used because NSE blocks third-party embeds)
   let cleanSym = (symbol || 'RELIANCE').replace('.NS', '').replace('.BO', '');
   let tvSymbol = cleanSym;
+  let isProxyIndex = false;
   if (cleanSym === '^NSEI' || cleanSym === 'NIFTY50' || cleanSym === 'NIFTY') {
     tvSymbol = 'BSE:SENSEX';
+    isProxyIndex = true;
   } else if (cleanSym === '^NSEBANK' || cleanSym === 'BANKNIFTY') {
     tvSymbol = 'BSE:BANK';
+    isProxyIndex = true;
   } else if (cleanSym === 'FINNIFTY' || cleanSym === 'NIFTY_FIN_SERVICE') {
     tvSymbol = 'BSE:SENSEX';
+    isProxyIndex = true;
   } else if (cleanSym === 'M&M') {
     tvSymbol = 'BSE:M_M';
   } else if (!cleanSym.includes(':')) {
@@ -101,9 +105,9 @@ export default function TradingViewChart({
       }}>
         {/* Left: Indicator & Timeframe */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#10b981', fontSize: '0.75rem', fontWeight: 700 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-            <span>Real Chart: {tvSymbol}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: isProxyIndex ? '#f59e0b' : '#10b981', fontSize: '0.75rem', fontWeight: 700 }} title="TradingView embeds use BSE feeds; NSE index symbols use the correlated BSE index proxy">
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: isProxyIndex ? '#f59e0b' : '#10b981', display: 'inline-block' }} />
+            <span>{isProxyIndex ? `Chart Proxy: ${tvSymbol} (NSE Index uses BSE proxy)` : `Chart Feed: ${tvSymbol} (BSE)`}</span>
           </div>
 
           <div style={{

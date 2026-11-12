@@ -220,7 +220,7 @@ MASTER_NSE_STOCKS = [
     {"ticker": "HINDUNILVR", "symbol": "HINDUNILVR.NS", "name": "Hindustan Unilever", "sector": "FMCG"},
     {"ticker": "KOTAKBANK", "symbol": "KOTAKBANK.NS", "name": "Kotak Mahindra Bank", "sector": "Banking"},
     {"ticker": "AXISBANK", "symbol": "AXISBANK.NS", "name": "Axis Bank Ltd.", "sector": "Banking"},
-    {"ticker": "TATAMOTORS", "symbol": "TATAMOTORS.NS", "name": "Tata Motors Ltd.", "sector": "Automotive"},
+    {"ticker": "TATAMOTORS", "symbol": "TMCV.NS", "name": "Tata Motors Ltd.", "sector": "Automotive"},
     {"ticker": "MARUTI", "symbol": "MARUTI.NS", "name": "Maruti Suzuki India", "sector": "Automotive"},
     {"ticker": "SUNPHARMA", "symbol": "SUNPHARMA.NS", "name": "Sun Pharma Industries", "sector": "Pharma"},
     {"ticker": "TITAN", "symbol": "TITAN.NS", "name": "Titan Company Ltd.", "sector": "Consumer Goods"},
@@ -238,7 +238,7 @@ MASTER_NSE_STOCKS = [
     {"ticker": "ASIANPAINT", "symbol": "ASIANPAINT.NS", "name": "Asian Paints Ltd.", "sector": "Consumer Paints"},
     {"ticker": "BAJAJFINSV", "symbol": "BAJAJFINSV.NS", "name": "Bajaj Finserv Ltd.", "sector": "Financials"},
     {"ticker": "ULTRACEMCO", "symbol": "ULTRACEMCO.NS", "name": "UltraTech Cement", "sector": "Cement"},
-    {"ticker": "ZOMATO", "symbol": "ZOMATO.NS", "name": "Zomato Ltd.", "sector": "Consumer Tech"},
+    {"ticker": "ZOMATO", "symbol": "ETERNAL.NS", "name": "Zomato Ltd.", "sector": "Consumer Tech"},
     {"ticker": "JIOFIN", "symbol": "JIOFIN.NS", "name": "Jio Financial Services", "sector": "Financials"},
     {"ticker": "HAL", "symbol": "HAL.NS", "name": "Hindustan Aeronautics", "sector": "Defense / Aerospace"},
     {"ticker": "BEL", "symbol": "BEL.NS", "name": "Bharat Electronics", "sector": "Defense"},
@@ -536,7 +536,7 @@ def generate_fallback_data(symbol: str, period_days: int = 60) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def fetch_stock_data(symbol: str, period: str = "3mo", interval: str = "1d") -> Tuple[pd.DataFrame, bool]:
     is_live = False
     try:
