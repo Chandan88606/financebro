@@ -536,6 +536,183 @@ export const api = {
     return found;
   },
 
+  syncFromSupabase: async () => {
+    try {
+      const [remotePort, remotePositions, remoteTrades] = await Promise.all([
+        supabaseDb.getPortfolio(),
+        supabaseDb.getPositions(),
+        supabaseDb.getTrades()
+      ]);
+
+      if (remotePort === null && remotePositions === null && remoteTrades === null) {
+        return { connected: false, restoredPositions: 0, restoredTrades: 0 };
+      }
+
+      const formatTs = (ts) => {
+        if (!ts) return new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return String(ts).substring(0, 19);
+        return d.toISOString().replace('T', ' ').substring(0, 19);
+      };
+
+      let hasLocal = false;
+      try {
+        hasLocal = typeof localStorage !== 'undefined' && Boolean(localStorage.getItem(STORAGE_KEYS.PORTFOLIO));
+      } catch (e) {}
+
+      localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+      if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
+      if (!Array.isArray(localPortfolio.history)) localPortfolio.history = [];
+
+      const localUpdatedMs = localPortfolio.updated_at ? new Date(localPortfolio.updated_at).getTime() : 0;
+      const remoteUpdatedMs = remotePort?.updated_at ? new Date(remotePort.updated_at).getTime() : 0;
+      const remoteIsNewer = !hasLocal || (remoteUpdatedMs > localUpdatedMs);
+
+      let syncedPositions = [];
+      if (Array.isArray(remotePositions) && remotePositions.length > 0) {
+        syncedPositions = remotePositions
+          .filter(p => p && p.ticker && Number(p.qty) > 0)
+          .map(p => ({
+            ticker: p.ticker,
+            qty: Number(p.qty),
+            avg_price: Number(p.avg_price),
+            current_price: Number(p.avg_price),
+            invested: Number(p.invested),
+            unrealized_pnl: 0.0,
+            unrealized_pnl_pct: 0.0,
+            opened_at: formatTs(p.opened_at)
+          }));
+      }
+
+      let syncedHistory = [];
+      let reconstructedPositions = [];
+      let reconstructedRealized = 0;
+      let reconstructedCharges = 0;
+
+      if (Array.isArray(remoteTrades) && remoteTrades.length > 0) {
+        const orderedAsc = [...remoteTrades].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+        const posMap = new Map();
+
+        orderedAsc.forEach((tr) => {
+          const ticker = String(tr.ticker || '').toUpperCase();
+          const action = String(tr.action || '').toUpperCase();
+          const qty = Number(tr.qty || 0);
+          const price = Number(tr.price || 0);
+          const turnover = Number(tr.turnover ?? qty * price);
+          const charges = Number(tr.charges || 0);
+          if (!ticker || qty <= 0 || price <= 0) return;
+
+          reconstructedCharges += charges;
+          if (action === 'BUY') {
+            const existing = posMap.get(ticker);
+            if (existing) {
+              const newQty = existing.qty + qty;
+              const newCost = existing.invested + turnover;
+              existing.qty = newQty;
+              existing.avg_price = Math.round((newCost / newQty) * 100) / 100;
+              existing.invested = Math.round(newQty * existing.avg_price * 100) / 100;
+              existing.current_price = price;
+              existing.last_updated = formatTs(tr.timestamp);
+            } else {
+              posMap.set(ticker, {
+                ticker,
+                qty,
+                avg_price: Math.round(price * 100) / 100,
+                current_price: Math.round(price * 100) / 100,
+                invested: Math.round(turnover * 100) / 100,
+                unrealized_pnl: 0.0,
+                unrealized_pnl_pct: 0.0,
+                opened_at: formatTs(tr.timestamp)
+              });
+            }
+          } else if (action === 'SELL') {
+            reconstructedRealized += Number(tr.pnl || 0);
+            const existing = posMap.get(ticker);
+            if (existing) {
+              if (qty >= existing.qty) {
+                posMap.delete(ticker);
+              } else {
+                existing.qty -= qty;
+                existing.invested = Math.round(existing.qty * existing.avg_price * 100) / 100;
+              }
+            }
+          }
+        });
+
+        reconstructedPositions = Array.from(posMap.values());
+        syncedHistory = [...remoteTrades]
+          .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+          .map((tr) => ({
+            id: tr.id,
+            timestamp: formatTs(tr.timestamp),
+            ticker: tr.ticker,
+            action: tr.action,
+            qty: Number(tr.qty || 0),
+            price: Number(tr.price || 0),
+            turnover: Number(tr.turnover || 0),
+            charges: Number(tr.charges || 0),
+            breakdown: {
+              brokerage: Number(tr.brokerage || 0),
+              stt: Number(tr.stt || 0),
+              gst: Number(tr.gst || 0),
+              stampDuty: Number(tr.stamp_duty || 0)
+            },
+            pnl: Number(tr.pnl || 0),
+            consensus_score: Number(tr.consensus_score || 0)
+          }));
+      }
+
+      // If financebro_positions table was empty (legacy bug before position upserts), recover open positions from trade ledger
+      const candidatePositions = syncedPositions.length > 0 ? syncedPositions : reconstructedPositions;
+      let restoredPositionsCount = 0;
+      let restoredTradesCount = 0;
+
+      if (candidatePositions.length > 0 && (localPortfolio.positions.length === 0 || remoteIsNewer)) {
+        localPortfolio.positions = candidatePositions;
+        restoredPositionsCount = candidatePositions.length;
+        if (syncedPositions.length === 0) {
+          await Promise.allSettled(candidatePositions.map(pos => supabaseDb.upsertPosition(pos)));
+        }
+      }
+
+      if (syncedHistory.length > 0 && (localPortfolio.history.length === 0 || syncedHistory.length > localPortfolio.history.length)) {
+        localPortfolio.history = syncedHistory;
+        restoredTradesCount = syncedHistory.length;
+        if (!localPortfolio.total_charges_paid && reconstructedCharges > 0) {
+          localPortfolio.total_charges_paid = Math.round(reconstructedCharges * 100) / 100;
+        }
+        if (!localPortfolio.realized_pnl && reconstructedRealized !== 0) {
+          localPortfolio.realized_pnl = Math.round(reconstructedRealized * 100) / 100;
+        }
+      }
+
+      if (remotePort && (remoteIsNewer || (localPortfolio.positions.length === 0 && localPortfolio.history.length === 0))) {
+        if (typeof remotePort.wallet_balance === 'number' || !Number.isNaN(Number(remotePort.wallet_balance))) {
+          localPortfolio.wallet_balance = Number(remotePort.wallet_balance);
+        }
+        if (typeof remotePort.initial_capital === 'number' || !Number.isNaN(Number(remotePort.initial_capital))) {
+          localPortfolio.initial_capital = Number(remotePort.initial_capital);
+        }
+        if (remotePort.updated_at) {
+          localPortfolio.updated_at = remotePort.updated_at;
+        }
+      }
+
+      if (restoredPositionsCount > 0 || restoredTradesCount > 0 || (remotePort && remoteIsNewer)) {
+        saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+        if (restoredPositionsCount > 0 || restoredTradesCount > 0) {
+          localLogs.push(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ☁️ Synced from Supabase: ${localPortfolio.positions.length} open holding(s), ${localPortfolio.history.length} trade(s).`);
+          saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
+        }
+      }
+
+      return { connected: true, restoredPositions: restoredPositionsCount, restoredTrades: restoredTradesCount };
+    } catch (e) {
+      console.warn("Supabase sync warning:", e?.message || e);
+      return { connected: false, restoredPositions: 0, restoredTrades: 0 };
+    }
+  },
+
   getPortfolio: async () => {
     localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
     if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
@@ -680,11 +857,22 @@ export const api = {
       localLogs.push(log);
     }
 
+    const updatedPos = localPortfolio.positions.find(p => p.ticker === ticker);
+    const investedTotal = Math.round(
+      localPortfolio.positions.reduce((sum, p) => sum + Number(p.invested || 0), 0) * 100
+    ) / 100;
+    localPortfolio.invested_capital = investedTotal;
+    localPortfolio.updated_at = new Date().toISOString();
+
     localPortfolio.history.unshift(tradeRecord);
     saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
-    supabaseDb.insertTrade(tradeRecord);
-    await supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital);
+
+    await Promise.allSettled([
+      supabaseDb.insertTrade(tradeRecord),
+      updatedPos ? supabaseDb.upsertPosition(updatedPos) : supabaseDb.deletePosition(ticker),
+      supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital, investedTotal)
+    ]);
 
     return { success: true, trade: tradeRecord };
   },
@@ -709,6 +897,7 @@ export const api = {
       1,
       Math.round(((localPortfolio.initial_capital || prevBalance || 100000) + delta) * 100) / 100
     );
+    localPortfolio.updated_at = new Date().toISOString();
 
     saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
 
@@ -739,7 +928,8 @@ export const api = {
       roi_pct: 0.0,
       total_charges_paid: 0.0,
       positions: [],
-      history: []
+      history: [],
+      updated_at: new Date().toISOString()
     };
 
     localFoPositions = [];
@@ -753,7 +943,11 @@ export const api = {
     localLogs.push(log);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
 
-    await supabaseDb.savePortfolio(initial_capital, initial_capital);
+    await Promise.allSettled([
+      supabaseDb.clearPositions(),
+      supabaseDb.clearTrades(),
+      supabaseDb.savePortfolio(initial_capital, initial_capital, 0)
+    ]);
     return { success: true, wallet_balance: initial_capital };
   },
 

@@ -162,6 +162,7 @@ export default function App() {
   const loadInitialData = async () => {
     try {
       setLoadingStocks(true);
+      await api.syncFromSupabase();
       const [cfgRes, stocksRes, portRes, logsRes, foPosRes] = await Promise.all([
         api.getConfig(),
         api.getStocks(),

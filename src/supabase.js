@@ -50,7 +50,7 @@ export const supabaseDb = {
 
   // 3. Get Active Positions
   getPositions: async () => {
-    if (!supabase) return [];
+    if (!supabase) return null;
     try {
       const { data, error } = await supabase
         .from('financebro_positions')
@@ -59,7 +59,64 @@ export const supabaseDb = {
       return data || [];
     } catch (e) {
       console.warn("Supabase getPositions fallback:", e.message);
-      return [];
+      return null;
+    }
+  },
+
+  // 3b. Upsert Active Position
+  upsertPosition: async (position) => {
+    if (!supabase || !position?.ticker) return;
+    try {
+      const parseIso = (ts) => {
+        if (!ts) return new Date().toISOString();
+        const normalized = typeof ts === 'string' && ts.includes(' ') && !ts.includes('T')
+          ? `${ts.replace(' ', 'T')}Z`
+          : ts;
+        const d = new Date(normalized);
+        return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+      };
+      const { error } = await supabase
+        .from('financebro_positions')
+        .upsert({
+          ticker: position.ticker,
+          qty: Math.round(position.qty),
+          avg_price: position.avg_price,
+          invested: position.invested,
+          opened_at: parseIso(position.opened_at),
+          consensus_score: position.consensus_score || 0,
+          last_updated: new Date().toISOString()
+        });
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase upsertPosition fallback:", e.message);
+    }
+  },
+
+  // 3c. Delete Closed Position
+  deletePosition: async (ticker) => {
+    if (!supabase || !ticker) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_positions')
+        .delete()
+        .eq('ticker', ticker);
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase deletePosition fallback:", e.message);
+    }
+  },
+
+  // 3d. Clear All Positions (for explicit ledger reset)
+  clearPositions: async () => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_positions')
+        .delete()
+        .neq('ticker', '');
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase clearPositions fallback:", e.message);
     }
   },
 
@@ -78,10 +135,10 @@ export const supabaseDb = {
           price: trade.price,
           turnover: trade.turnover,
           charges: trade.charges,
-          brokerage: trade.breakdown?.brokerage || 20,
-          stt: trade.breakdown?.stt || 0,
-          gst: trade.breakdown?.gst || 0,
-          stamp_duty: trade.breakdown?.stamp_duty || 0,
+          brokerage: trade.breakdown?.brokerage ?? 20,
+          stt: trade.breakdown?.stt ?? 0,
+          gst: trade.breakdown?.gst ?? 0,
+          stamp_duty: trade.breakdown?.stampDuty ?? trade.breakdown?.stamp_duty ?? 0,
           pnl: trade.pnl || 0,
           consensus_score: trade.consensus_score || 0
         }]);
@@ -93,7 +150,7 @@ export const supabaseDb = {
 
   // 5. Get Trade History
   getTrades: async () => {
-    if (!supabase) return [];
+    if (!supabase) return null;
     try {
       const { data, error } = await supabase
         .from('financebro_trades')
@@ -103,7 +160,21 @@ export const supabaseDb = {
       return data || [];
     } catch (e) {
       console.warn("Supabase getTrades fallback:", e.message);
-      return [];
+      return null;
+    }
+  },
+
+  // 5b. Clear Trade History (for explicit ledger reset)
+  clearTrades: async () => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_trades')
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase clearTrades fallback:", e.message);
     }
   },
 
