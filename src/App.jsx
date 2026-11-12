@@ -432,6 +432,11 @@ export default function App() {
     await refreshStocks();
   };
 
+  const handleUpdateWalletBalance = async (newBalance) => {
+    await api.updateWalletBalance(newBalance);
+    await refreshPortfolio();
+  };
+
   const handleResetPortfolio = async (capital = 100000) => {
     await api.resetPortfolio(capital);
     await refreshPortfolio();
@@ -455,6 +460,7 @@ export default function App() {
         walletBalance={walletBalance}
         totalEquity={portfolio?.total_equity ?? walletBalance}
         holdingsValue={portfolio?.current_portfolio_value ?? 0}
+        onUpdateWallet={handleUpdateWalletBalance}
         onResetWallet={handleResetPortfolio}
         onSeedDemo={handleSeedDemoPortfolio}
         filterAffordable={filterAffordable}

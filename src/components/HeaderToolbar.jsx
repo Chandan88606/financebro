@@ -23,6 +23,7 @@ export default function HeaderToolbar({
   walletBalance,
   totalEquity = 100000.0,
   holdingsValue = 0.0,
+  onUpdateWallet,
   onResetWallet,
   onSeedDemo,
   filterAffordable,
@@ -51,11 +52,14 @@ export default function HeaderToolbar({
   const isDerivativesRoute = location.pathname.includes('/derivatives') || location.pathname.includes('/options') || currentScreen === 'OPTIONS';
   const activeScreen = isDerivativesRoute ? 'OPTIONS' : 'EQUITY';
 
-  const handleWalletSubmit = (e) => {
+  const handleWalletSubmit = async (e) => {
     e.preventDefault();
     const val = parseFloat(inputWallet);
-    if (!isNaN(val) && val > 0) {
-      onResetWallet(val);
+    if (!isNaN(val) && val >= 0) {
+      const updater = onUpdateWallet || onResetWallet;
+      if (updater) {
+        await updater(val);
+      }
       setEditingWallet(false);
     }
   };
@@ -276,9 +280,10 @@ export default function HeaderToolbar({
           </div>
 
           {editingWallet ? (
-            <form onSubmit={handleWalletSubmit} style={{ display: 'flex', gap: '0.35rem' }}>
+            <form onSubmit={handleWalletSubmit} style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
               <input
                 type="number"
+                min="0"
                 step="1000"
                 value={inputWallet}
                 onChange={(e) => setInputWallet(e.target.value)}
@@ -289,6 +294,14 @@ export default function HeaderToolbar({
               <button type="submit" className="btn btn-emerald" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}>
                 Set
               </button>
+              <button
+                type="button"
+                onClick={() => setEditingWallet(false)}
+                className="btn btn-outline"
+                style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}
+              >
+                Cancel
+              </button>
             </form>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -297,7 +310,7 @@ export default function HeaderToolbar({
               </span>
               <button 
                 onClick={() => { setInputWallet(walletBalance); setEditingWallet(true); }}
-                title="Edit initial wallet capital"
+                title="Edit available wallet cash (keeps existing holdings & trades)"
                 style={{ background: 'none', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', fontSize: '0.7rem' }}
               >
                 Edit

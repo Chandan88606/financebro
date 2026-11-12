@@ -684,9 +684,46 @@ export const api = {
     saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
     supabaseDb.insertTrade(tradeRecord);
-    supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital);
+    await supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital);
 
     return { success: true, trade: tradeRecord };
+  },
+
+  updateWalletBalance: async (new_balance) => {
+    const parsed = Number(new_balance);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error("Wallet amount must be a valid non-negative number.");
+    }
+
+    localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+    if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
+    if (!Array.isArray(localPortfolio.history)) localPortfolio.history = [];
+
+    const prevBalance = Number(localPortfolio.wallet_balance || 0);
+    const nextBalance = Math.round(parsed * 100) / 100;
+    const delta = Math.round((nextBalance - prevBalance) * 100) / 100;
+
+    // Adjust initial_capital by net cash added/withdrawn so ROI% stays accurate without erasing holdings or history
+    localPortfolio.wallet_balance = nextBalance;
+    localPortfolio.initial_capital = Math.max(
+      1,
+      Math.round(((localPortfolio.initial_capital || prevBalance || 100000) + delta) * 100) / 100
+    );
+
+    saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+
+    const log = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] 💰 Wallet cash updated from ₹${prevBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} to ₹${nextBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (existing holdings & trade history preserved).`;
+    localLogs.push(log);
+    saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
+
+    await supabaseDb.savePortfolio(
+      localPortfolio.wallet_balance,
+      localPortfolio.initial_capital,
+      localPortfolio.invested_capital || 0
+    );
+
+    const updated = await api.getPortfolio();
+    return { success: true, wallet_balance: updated.wallet_balance, portfolio: updated };
   },
 
   resetPortfolio: async (initial_capital = 100000) => {
