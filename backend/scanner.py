@@ -265,13 +265,19 @@ def get_candlestick_data(ticker: str, period: str = "6mo", interval: str = "1d")
 def check_auto_exit_positions(current_prices: Dict[str, float]) -> List[str]:
     """
     Checks active positions against:
-    1. Auto-exit consensus score threshold (e.g., score < 5/10)
-    2. Stop-Loss % (e.g. loss <= -3.0% or user configured)
-    3. Take-Profit % (e.g. gain >= +8.0% if configured)
+    1. Take-Profit Target % (e.g. gain >= +10.0%)
+    2. Trailing Stop-Loss % (e.g. pullback >= 2.5% from peak once in profit)
+    3. Break-Even Lock % (e.g. reached >= +3.0%, now fell to <= cost basis)
+    4. Stop-Loss % (e.g. loss <= -3.0%)
+    5. Auto-exit consensus score threshold (e.g., score < 5/10)
     """
     exit_threshold = state.rules.get("consensus", {}).get("auto_sell_exit_threshold", 5)
-    max_stop_loss_pct = state.rules.get("risk", {}).get("stop_loss_pct", 3.0)  # default 3% max loss
-    take_profit_pct = state.rules.get("risk", {}).get("take_profit_pct", 10.0)
+    risk_cfg = state.rules.get("risk", {})
+    max_stop_loss_pct = risk_cfg.get("stop_loss_pct") or state.rules.get("stop_loss_pct", 3.0)
+    take_profit_pct = risk_cfg.get("take_profit_pct") or state.rules.get("take_profit_pct", 10.0)
+    trailing_enabled = risk_cfg.get("trailing_stop_enabled", True) if "trailing_stop_enabled" in risk_cfg else state.rules.get("trailing_stop_enabled", True)
+    trailing_pct = risk_cfg.get("trailing_stop_pct") or state.rules.get("trailing_stop_pct", 2.5)
+    breakeven_pct = risk_cfg.get("breakeven_lock_pct") or state.rules.get("breakeven_lock_pct", 3.0)
 
     triggered = []
     active_tickers = list(state.active_positions.keys())
@@ -285,13 +291,23 @@ def check_auto_exit_positions(current_prices: Dict[str, float]) -> List[str]:
 
         pnl_pct = ((current_price - avg_price) / avg_price) * 100.0 if avg_price > 0 else 0.0
 
+        # Track peak price
+        peak_price = max(pos.get("peak_price", avg_price) or avg_price, current_price)
+        pos["peak_price"] = peak_price
+        peak_pnl_pct = ((peak_price - avg_price) / avg_price) * 100.0 if avg_price > 0 else 0.0
+        pullback_from_peak = ((peak_price - current_price) / peak_price) * 100.0 if peak_price > 0 else 0.0
+
         exit_reason = None
-        if pnl_pct <= -abs(max_stop_loss_pct):
+        if take_profit_pct > 0 and pnl_pct >= take_profit_pct:
+            exit_reason = f"TAKE-PROFIT TARGET REACHED (+{pnl_pct:.2f}% >= +{take_profit_pct}%)"
+        elif trailing_enabled and peak_pnl_pct >= breakeven_pct and pullback_from_peak >= trailing_pct and current_price > avg_price:
+            exit_reason = f"TRAILING STOP-LOSS SECURED (+{pnl_pct:.2f}% locked after {pullback_from_peak:.2f}% pullback from peak ₹{peak_price:,.2f})"
+        elif trailing_enabled and peak_pnl_pct >= breakeven_pct and current_price <= avg_price:
+            exit_reason = f"BREAK-EVEN STOP-LOSS TRIGGERED (Capital protected after peak of +{peak_pnl_pct:.2f}%)"
+        elif pnl_pct <= -abs(max_stop_loss_pct):
             exit_reason = f"STOP-LOSS HIT ({pnl_pct:.2f}% <= -{max_stop_loss_pct}%)"
         elif score < exit_threshold:
             exit_reason = f"CONSENSUS SCORE DROP ({score}/10 < {exit_threshold}/10)"
-        elif take_profit_pct > 0 and pnl_pct >= take_profit_pct:
-            exit_reason = f"TAKE-PROFIT TARGET REACHED (+{pnl_pct:.2f}% >= +{take_profit_pct}%)"
 
         if exit_reason:
             qty = pos["qty"]

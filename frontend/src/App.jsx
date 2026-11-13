@@ -248,10 +248,13 @@ export default function App() {
     if (!autoExit) return;
 
     const intervalId = setInterval(async () => {
-      // 4A. Check Equity Positions Auto-Exit (Stop-loss, Take-profit, Severe breakdown)
+      // 4A. Check Equity Positions Auto-Exit (Take-profit, Trailing stop-loss, Break-even lock, Stop-loss, Breakdown)
       if (portfolio && portfolio.positions && portfolio.positions.length > 0) {
         const stopLossPct = rules?.risk?.stop_loss_pct ?? 3.0;
         const takeProfitPct = rules?.risk?.take_profit_pct ?? 10.0;
+        const trailingEnabled = rules?.risk?.trailing_stop_enabled !== false;
+        const trailingPct = rules?.risk?.trailing_stop_pct ?? 2.5;
+        const breakevenPct = rules?.risk?.breakeven_lock_pct ?? 3.0;
 
         for (const pos of [...portfolio.positions]) {
           try {
@@ -260,13 +263,24 @@ export default function App() {
 
             const currentPrice = detail.current_price;
             const score = detail.consensus_score;
-            const pnlPct = ((currentPrice - pos.avg_price) / pos.avg_price) * 100;
+            const avgPrice = pos.avg_price;
+            const pnlPct = ((currentPrice - avgPrice) / avgPrice) * 100;
+
+            // Track highest price seen since entry
+            const peakPrice = Math.max(pos.peak_price || avgPrice, currentPrice);
+            pos.peak_price = peakPrice;
+            const peakPnlPct = ((peakPrice - avgPrice) / avgPrice) * 100;
+            const pullbackFromPeakPct = peakPrice > 0 ? ((peakPrice - currentPrice) / peakPrice) * 100 : 0;
 
             let exitReason = null;
-            if (pnlPct <= -Math.abs(stopLossPct)) {
-              exitReason = `EQUITY STOP-LOSS TRIGGERED (${pnlPct.toFixed(2)}% <= -${stopLossPct}%)`;
-            } else if (takeProfitPct > 0 && pnlPct >= takeProfitPct) {
+            if (takeProfitPct > 0 && pnlPct >= takeProfitPct) {
               exitReason = `EQUITY TAKE-PROFIT TARGET REACHED (+${pnlPct.toFixed(2)}% >= +${takeProfitPct}%)`;
+            } else if (trailingEnabled && peakPnlPct >= breakevenPct && pullbackFromPeakPct >= trailingPct && currentPrice > avgPrice) {
+              exitReason = `EQUITY TRAILING STOP-LOSS SECURED (+${pnlPct.toFixed(2)}% profit locked after ${pullbackFromPeakPct.toFixed(2)}% pullback from peak ₹${peakPrice.toFixed(2)})`;
+            } else if (trailingEnabled && peakPnlPct >= breakevenPct && currentPrice <= avgPrice) {
+              exitReason = `EQUITY BREAK-EVEN STOP-LOSS TRIGGERED (Capital protected after peak of +${peakPnlPct.toFixed(2)}%)`;
+            } else if (pnlPct <= -Math.abs(stopLossPct)) {
+              exitReason = `EQUITY STOP-LOSS TRIGGERED (${pnlPct.toFixed(2)}% <= -${stopLossPct}%)`;
             } else if (score <= 2) {
               // Only trigger on severe bearish consensus breakdown (score <= 2/10) so manual holdings aren't immediately dumped
               exitReason = `SEVERE CONSENSUS BREAKDOWN (${score}/10 <= 2/10)`;

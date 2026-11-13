@@ -217,7 +217,14 @@ export default function PortfolioLedger({
                         <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700 }}>{pos.ticker}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>{pos.qty}</td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{pos.avg_price.toFixed(2)}</td>
-                        <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>₹{pos.current_price.toFixed(2)}</td>
+                        <td className="mono" style={{ padding: '0.5rem 0.75rem' }}>
+                          <div>₹{pos.current_price.toFixed(2)}</div>
+                          {pos.peak_price && pos.peak_price > pos.avg_price && (
+                            <div style={{ fontSize: '0.66rem', color: '#38bdf8', marginTop: 1 }} title="Highest price recorded since entry, used for trailing profit lock">
+                              Peak: ₹{pos.peak_price.toFixed(2)}
+                            </div>
+                          )}
+                        </td>
                         <td className="mono" style={{ padding: '0.5rem 0.75rem', color: isPos ? 'var(--accent-emerald)' : 'var(--accent-rose)', fontWeight: 700 }}>
                           {isPos ? '+' : ''}₹{pos.unrealized_pnl.toFixed(2)} ({pos.unrealized_pnl_pct}%)
                         </td>

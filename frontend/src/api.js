@@ -577,6 +577,7 @@ export const api = {
             qty: Number(p.qty),
             avg_price: Number(p.avg_price),
             current_price: Number(p.avg_price),
+            peak_price: Number(p.peak_price || p.avg_price),
             invested: Number(p.invested),
             unrealized_pnl: 0.0,
             unrealized_pnl_pct: 0.0,
@@ -619,6 +620,7 @@ export const api = {
                 qty,
                 avg_price: Math.round(price * 100) / 100,
                 current_price: Math.round(price * 100) / 100,
+                peak_price: Math.round(price * 100) / 100,
                 invested: Math.round(turnover * 100) / 100,
                 unrealized_pnl: 0.0,
                 unrealized_pnl_pct: 0.0,
@@ -728,6 +730,7 @@ export const api = {
     localPortfolio.positions.forEach(pos => {
       const curPrice = stockMap[pos.ticker] || pos.avg_price;
       pos.current_price = curPrice;
+      pos.peak_price = Math.max(pos.peak_price || pos.avg_price, curPrice);
       const posValue = Math.round(pos.qty * curPrice * 100) / 100;
       currentVal += posValue;
       totalInvested += pos.invested;
@@ -808,6 +811,7 @@ export const api = {
         existing.avg_price = Math.round((newTotalCost / newTotalQty) * 100) / 100;
         existing.qty = newTotalQty;
         existing.invested = Math.round(newTotalQty * existing.avg_price * 100) / 100;
+        existing.peak_price = Math.max(existing.peak_price || existing.avg_price, price);
         existing.last_updated = tradeRecord.timestamp;
       } else {
         localPortfolio.positions.push({
@@ -815,6 +819,7 @@ export const api = {
           qty,
           avg_price: price,
           current_price: price,
+          peak_price: price,
           invested: turnover,
           unrealized_pnl: 0.0,
           unrealized_pnl_pct: 0.0,
@@ -964,6 +969,7 @@ export const api = {
         qty: 15,
         avg_price: 1285.00,
         current_price: 1306.20,
+        peak_price: 1312.00,
         invested: 17220.00,
         unrealized_pnl: 253.50,
         unrealized_pnl_pct: 1.47,
@@ -974,6 +980,7 @@ export const api = {
         qty: 100,
         avg_price: 144.20,
         current_price: 148.50,
+        peak_price: 149.20,
         invested: 14420.00,
         unrealized_pnl: 430.00,
         unrealized_pnl_pct: 2.98,
@@ -984,6 +991,7 @@ export const api = {
         qty: 12,
         avg_price: 1712.00,
         current_price: 1740.00,
+        peak_price: 1748.00,
         invested: 20544.00,
         unrealized_pnl: 336.00,
         unrealized_pnl_pct: 1.64,
@@ -994,6 +1002,7 @@ export const api = {
         qty: 10,
         avg_price: 1660.00,
         current_price: 1690.00,
+        peak_price: 1695.00,
         invested: 16600.00,
         unrealized_pnl: 300.00,
         unrealized_pnl_pct: 1.81,

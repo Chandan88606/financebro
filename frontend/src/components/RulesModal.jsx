@@ -183,6 +183,89 @@ export default function RulesModal({ isOpen, onClose, rules, onSave, onReset }) 
                 </span>
               </div>
             </div>
+
+            <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                🎯 Take-Profit Target (+{localRules.risk?.take_profit_pct || 10.0}%)
+              </label>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                Automatically locks in profits and sells when gain reaches or exceeds this percentage.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <input
+                  type="range"
+                  min="3"
+                  max="30"
+                  step="0.5"
+                  value={localRules.risk?.take_profit_pct || 10.0}
+                  onChange={(e) => handleParamChange('risk', 'take_profit_pct', e.target.value)}
+                  style={{ flex: 1, accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
+                />
+                <span className="mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-emerald)', minWidth: 60, textAlign: 'center' }}>
+                  +{localRules.risk?.take_profit_pct || 10.0}%
+                </span>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span>📈 Trailing Stop-Loss & Dynamic Profit Lock</span>
+                  <span className="badge-tag badge-emerald" style={{ fontSize: '0.62rem' }}>PRO</span>
+                </label>
+                <input
+                  type="checkbox"
+                  checked={localRules.risk?.trailing_stop_enabled !== false}
+                  onChange={(e) => handleParamChange('risk', 'trailing_stop_enabled', e.target.checked)}
+                  style={{ accentColor: 'var(--accent-emerald)', cursor: 'pointer', transform: 'scale(1.15)' }}
+                />
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                Trails the highest peak price reached since entry. If the stock pulls back by this percentage after gaining, profit is automatically locked in before reversing to a loss.
+              </p>
+              {localRules.risk?.trailing_stop_enabled !== false && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                      <span>Trailing Pullback from Peak:</span>
+                      <span className="mono" style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>
+                        {localRules.risk?.trailing_stop_pct || 2.5}%
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <input
+                        type="range"
+                        min="1"
+                        max="7"
+                        step="0.5"
+                        value={localRules.risk?.trailing_stop_pct || 2.5}
+                        onChange={(e) => handleParamChange('risk', 'trailing_stop_pct', e.target.value)}
+                        style={{ flex: 1, accentColor: 'var(--accent-cyan)', cursor: 'pointer' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                      <span>Break-Even Activation Gain:</span>
+                      <span className="mono" style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>
+                        +{localRules.risk?.breakeven_lock_pct || 3.0}%
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <input
+                        type="range"
+                        min="1"
+                        max="8"
+                        step="0.5"
+                        value={localRules.risk?.breakeven_lock_pct || 3.0}
+                        onChange={(e) => handleParamChange('risk', 'breakeven_lock_pct', e.target.value)}
+                        style={{ flex: 1, accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

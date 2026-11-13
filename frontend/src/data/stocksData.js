@@ -66,6 +66,9 @@ export const DEFAULT_RULES = {
   risk: {
     stop_loss_pct: 3.0,
     take_profit_pct: 10.0,
+    trailing_stop_enabled: true,
+    trailing_stop_pct: 2.5,
+    breakeven_lock_pct: 3.0,
     max_portfolio_risk_pct: 2.0
   },
   filters: {
