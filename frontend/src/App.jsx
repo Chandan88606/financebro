@@ -11,6 +11,7 @@ import MarketStatusModal from './components/MarketStatusModal';
 import DerivativesDashboard from './components/DerivativesDashboard';
 import { Zap, BarChart3, ArrowRight } from 'lucide-react';
 import { api, getWsUrl, IS_STANDALONE } from './api';
+import { supabase, supabaseDb } from './supabase';
 
 export default function App() {
   const location = useLocation();
@@ -145,14 +146,24 @@ export default function App() {
     };
   }, []);
 
-  // 1. Initial Data Fetch
+  // 1. Initial Data Fetch & Real-time Cloud Sync
   useEffect(() => {
     loadInitialData();
     if (!IS_STANDALONE) {
       setupWebSocket();
     }
 
+    // Supabase Real-Time Cross-Device Sync Listener
+    const realtimeChannel = supabaseDb.subscribeToChanges(async (table) => {
+      console.log(`[Supabase Realtime] Event on ${table}, syncing cloud state...`);
+      await api.syncFromSupabase(true);
+      await refreshPortfolio();
+    });
+
     return () => {
+      if (realtimeChannel && supabase) {
+        supabase.removeChannel(realtimeChannel);
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -396,6 +407,7 @@ export default function App() {
 
   const refreshPortfolio = async () => {
     try {
+      await api.syncFromSupabase();
       const [portRes, logsRes, foPosRes] = await Promise.all([
         api.getPortfolio(),
         api.getLogs(),

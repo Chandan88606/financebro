@@ -61,6 +61,11 @@ export default function OptionsTerminal({
       const activePos = await api.getFoPositions();
       setPositions(activePos || []);
 
+      if (api.getFoHistory) {
+        const hist = await api.getFoHistory();
+        if (hist) setFoHistory(hist);
+      }
+
       const rules = await api.getFoRules();
       if (rules) setFoRules(rules);
 

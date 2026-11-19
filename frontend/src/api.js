@@ -143,6 +143,7 @@ export const DEFAULT_FO_RULES = {
 let localFoRules = loadStorage(STORAGE_KEYS.FO_RULES, DEFAULT_FO_RULES);
 let localFoPositions = loadStorage(STORAGE_KEYS.FO_POSITIONS, []);
 let localFoHistory = loadStorage(STORAGE_KEYS.FO_HISTORY, []);
+let lastSupabaseSyncMs = 0;
 
 let localLogs = loadStorage(STORAGE_KEYS.LOGS, [
   `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] FinanceBro Institutional Terminal initialized. Real Market Mode active. Official NSE closing LTP & 1-minute silent live feed enabled.`
@@ -536,15 +537,23 @@ export const api = {
     return found;
   },
 
-  syncFromSupabase: async () => {
+  syncFromSupabase: async (force = false) => {
+    const now = Date.now();
+    if (!force && (now - lastSupabaseSyncMs < 2000)) {
+      return { connected: true, throttled: true };
+    }
+    lastSupabaseSyncMs = now;
+
     try {
-      const [remotePort, remotePositions, remoteTrades] = await Promise.all([
+      const [remotePort, remotePositions, remoteTrades, remoteFoPos, remoteFoHist] = await Promise.all([
         supabaseDb.getPortfolio(),
         supabaseDb.getPositions(),
-        supabaseDb.getTrades()
+        supabaseDb.getTrades(),
+        supabaseDb.getFoPositions(),
+        supabaseDb.getFoHistory()
       ]);
 
-      if (remotePort === null && remotePositions === null && remoteTrades === null) {
+      if (remotePort === null && remotePositions === null && remoteTrades === null && remoteFoPos === null && remoteFoHist === null) {
         return { connected: false, restoredPositions: 0, restoredTrades: 0 };
       }
 
@@ -555,21 +564,12 @@ export const api = {
         return d.toISOString().replace('T', ' ').substring(0, 19);
       };
 
-      let hasLocal = false;
-      try {
-        hasLocal = typeof localStorage !== 'undefined' && Boolean(localStorage.getItem(STORAGE_KEYS.PORTFOLIO));
-      } catch (e) {}
-
       localPortfolio = loadStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
       if (!Array.isArray(localPortfolio.positions)) localPortfolio.positions = [];
       if (!Array.isArray(localPortfolio.history)) localPortfolio.history = [];
 
-      const localUpdatedMs = localPortfolio.updated_at ? new Date(localPortfolio.updated_at).getTime() : 0;
-      const remoteUpdatedMs = remotePort?.updated_at ? new Date(remotePort.updated_at).getTime() : 0;
-      const remoteIsNewer = !hasLocal || (remoteUpdatedMs > localUpdatedMs);
-
       let syncedPositions = [];
-      if (Array.isArray(remotePositions) && remotePositions.length > 0) {
+      if (Array.isArray(remotePositions)) {
         syncedPositions = remotePositions
           .filter(p => p && p.ticker && Number(p.qty) > 0)
           .map(p => ({
@@ -664,51 +664,58 @@ export const api = {
           }));
       }
 
-      // If financebro_positions table was empty (legacy bug before position upserts), recover open positions from trade ledger
+      // If database is connected, remote state is authoritative across all devices!
       const candidatePositions = syncedPositions.length > 0 ? syncedPositions : reconstructedPositions;
-      let restoredPositionsCount = 0;
-      let restoredTradesCount = 0;
 
-      if (candidatePositions.length > 0 && (localPortfolio.positions.length === 0 || remoteIsNewer)) {
-        localPortfolio.positions = candidatePositions;
-        restoredPositionsCount = candidatePositions.length;
-        if (syncedPositions.length === 0) {
-          await Promise.allSettled(candidatePositions.map(pos => supabaseDb.upsertPosition(pos)));
+      // Handle brand new Supabase instance: if table is blank but local has state, seed remote
+      if (!remotePort && (!remoteTrades || remoteTrades.length === 0) && (localPortfolio.positions.length > 0 || localPortfolio.history.length > 0)) {
+        await supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital, localPortfolio.invested_capital || 0);
+        if (localPortfolio.positions.length > 0) {
+          await Promise.allSettled(localPortfolio.positions.map(pos => supabaseDb.upsertPosition(pos)));
         }
-      }
-
-      if (syncedHistory.length > 0 && (localPortfolio.history.length === 0 || syncedHistory.length > localPortfolio.history.length)) {
+      } else {
+        // Authoritative cloud sync
+        localPortfolio.positions = candidatePositions;
         localPortfolio.history = syncedHistory;
-        restoredTradesCount = syncedHistory.length;
-        if (!localPortfolio.total_charges_paid && reconstructedCharges > 0) {
+
+        if (reconstructedCharges > 0) {
           localPortfolio.total_charges_paid = Math.round(reconstructedCharges * 100) / 100;
         }
-        if (!localPortfolio.realized_pnl && reconstructedRealized !== 0) {
+        if (reconstructedRealized !== 0) {
           localPortfolio.realized_pnl = Math.round(reconstructedRealized * 100) / 100;
         }
-      }
 
-      if (remotePort && (remoteIsNewer || (localPortfolio.positions.length === 0 && localPortfolio.history.length === 0))) {
-        if (typeof remotePort.wallet_balance === 'number' || !Number.isNaN(Number(remotePort.wallet_balance))) {
-          localPortfolio.wallet_balance = Number(remotePort.wallet_balance);
-        }
-        if (typeof remotePort.initial_capital === 'number' || !Number.isNaN(Number(remotePort.initial_capital))) {
-          localPortfolio.initial_capital = Number(remotePort.initial_capital);
-        }
-        if (remotePort.updated_at) {
-          localPortfolio.updated_at = remotePort.updated_at;
-        }
-      }
-
-      if (restoredPositionsCount > 0 || restoredTradesCount > 0 || (remotePort && remoteIsNewer)) {
-        saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
-        if (restoredPositionsCount > 0 || restoredTradesCount > 0) {
-          localLogs.push(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ☁️ Synced from Supabase: ${localPortfolio.positions.length} open holding(s), ${localPortfolio.history.length} trade(s).`);
-          saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
+        if (remotePort) {
+          if (typeof remotePort.wallet_balance === 'number' || !Number.isNaN(Number(remotePort.wallet_balance))) {
+            localPortfolio.wallet_balance = Number(remotePort.wallet_balance);
+          }
+          if (typeof remotePort.initial_capital === 'number' || !Number.isNaN(Number(remotePort.initial_capital))) {
+            localPortfolio.initial_capital = Number(remotePort.initial_capital);
+          }
+          if (remotePort.updated_at) {
+            localPortfolio.updated_at = remotePort.updated_at;
+          }
         }
       }
 
-      return { connected: true, restoredPositions: restoredPositionsCount, restoredTrades: restoredTradesCount };
+      // Sync F&O Derivatives Positions & History across devices
+      if (Array.isArray(remoteFoPos)) {
+        localFoPositions = remoteFoPos;
+        saveStorage(STORAGE_KEYS.FO_POSITIONS, localFoPositions);
+      }
+      if (Array.isArray(remoteFoHist)) {
+        localFoHistory = remoteFoHist;
+        saveStorage(STORAGE_KEYS.FO_HISTORY, localFoHistory);
+      }
+
+      saveStorage(STORAGE_KEYS.PORTFOLIO, localPortfolio);
+
+      return {
+        connected: true,
+        restoredPositions: localPortfolio.positions.length,
+        restoredTrades: localPortfolio.history.length,
+        restoredFoPositions: localFoPositions.length
+      };
     } catch (e) {
       console.warn("Supabase sync warning:", e?.message || e);
       return { connected: false, restoredPositions: 0, restoredTrades: 0 };
@@ -951,6 +958,8 @@ export const api = {
     await Promise.allSettled([
       supabaseDb.clearPositions(),
       supabaseDb.clearTrades(),
+      supabaseDb.clearFoPositions(),
+      supabaseDb.clearFoHistory(),
       supabaseDb.savePortfolio(initial_capital, initial_capital, 0)
     ]);
     return { success: true, wallet_balance: initial_capital };
@@ -1198,6 +1207,14 @@ export const api = {
     saveStorage(STORAGE_KEYS.FO_HISTORY, localFoHistory);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
 
+    await Promise.allSettled([
+      supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital, localPortfolio.invested_capital || 0),
+      ...demoPositions.map(p => supabaseDb.upsertPosition(p)),
+      ...demoHistory.map(t => supabaseDb.insertTrade(t)),
+      ...demoFoPositions.map(p => supabaseDb.upsertFoPosition(p)),
+      ...demoFoHistory.map(t => supabaseDb.insertFoTrade(t))
+    ]);
+
     return { success: true, portfolio: localPortfolio, foPositions: localFoPositions };
   },
 
@@ -1221,6 +1238,10 @@ export const api = {
 
   getFoPositions: async () => {
     return localFoPositions;
+  },
+
+  getFoHistory: async () => {
+    return localFoHistory;
   },
 
   getFoRules: async () => {
@@ -1256,6 +1277,7 @@ export const api = {
     // Block required margin / deduct cash
     localPortfolio.wallet_balance = Math.round((localPortfolio.wallet_balance - cashNeeded) * 100) / 100;
     localPortfolio.total_charges_paid = Math.round(((localPortfolio.total_charges_paid || 0) + charges.total) * 100) / 100;
+    localPortfolio.updated_at = new Date().toISOString();
 
     const newPosition = {
       id: `FO-${Date.now()}`,
@@ -1293,6 +1315,11 @@ export const api = {
     saveStorage(STORAGE_KEYS.FO_POSITIONS, localFoPositions);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
 
+    await Promise.allSettled([
+      supabaseDb.upsertFoPosition(newPosition),
+      supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital, localPortfolio.invested_capital || 0)
+    ]);
+
     return { success: true, position: newPosition };
   },
 
@@ -1313,6 +1340,7 @@ export const api = {
 
     localPortfolio.realized_pnl = Math.round(((localPortfolio.realized_pnl || 0) + finalRealizedPnl) * 100) / 100;
     localPortfolio.total_charges_paid = Math.round(((localPortfolio.total_charges_paid || 0) + exitCharges.total) * 100) / 100;
+    localPortfolio.updated_at = new Date().toISOString();
 
     const closedRecord = {
       ...pos,
@@ -1332,6 +1360,12 @@ export const api = {
     saveStorage(STORAGE_KEYS.FO_POSITIONS, localFoPositions);
     saveStorage(STORAGE_KEYS.FO_HISTORY, localFoHistory);
     saveStorage(STORAGE_KEYS.LOGS, localLogs.slice(-150));
+
+    await Promise.allSettled([
+      supabaseDb.deleteFoPosition(positionId),
+      supabaseDb.insertFoTrade(closedRecord),
+      supabaseDb.savePortfolio(localPortfolio.wallet_balance, localPortfolio.initial_capital, localPortfolio.invested_capital || 0)
+    ]);
 
     return { success: true, closedRecord };
   }

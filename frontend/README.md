@@ -57,6 +57,24 @@ FinanceBro features two full trading workstations built into a unified HashRoute
 
 ---
 
+## 🌐 Real-Time Cross-Device Synchronization (Supabase)
+
+FinanceBro supports real-time ledger synchronization across multiple devices (Desktop PC, Laptop, Mobile). When Supabase is connected:
+- **Cash Equity Trades & Holdings** are written to Supabase and broadcast over WebSocket Realtime.
+- **F&O Derivatives Spreads & Closed History** are synchronized in real-time across all active screens.
+- **Wallet Balance** is kept synchronized across all logged-in devices.
+
+### Database Setup:
+1. Open your Supabase Dashboard -> **SQL Editor**.
+2. Run the queries from `supabase_schema.sql` (creates `financebro_portfolio`, `financebro_positions`, `financebro_trades`, `financebro_fo_positions`, `financebro_fo_history`, and enables `supabase_realtime` publication).
+3. Set your environment variables in `.env` (or in Vercel/Netlify Environment Variables):
+   ```env
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+   ```
+
+---
+
 ## 🚀 Repository & Deployment Structure
 
 The repository is synchronized across **both `main` and `master` branches**:

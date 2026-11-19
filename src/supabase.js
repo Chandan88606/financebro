@@ -8,7 +8,13 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://oamqppsogszth
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_bFAwxzfNmpJY5DKB7azWdQ_dGWYYHsV';
 
 export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    })
   : null;
 
 export const supabaseDb = {
@@ -208,6 +214,141 @@ export const supabaseDb = {
       return data?.rules || null;
     } catch (e) {
       console.warn("Supabase getRules fallback:", e.message);
+      return null;
+    }
+  },
+
+  // 8. F&O Active Positions
+  getFoPositions: async () => {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('financebro_fo_positions')
+        .select('*');
+      if (error) throw error;
+      return (data || []).map(r => (r.data ? { ...r.data, id: r.id } : r));
+    } catch (e) {
+      console.warn("Supabase getFoPositions fallback:", e.message);
+      return null;
+    }
+  },
+
+  upsertFoPosition: async (position) => {
+    if (!supabase || !position?.id) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_fo_positions')
+        .upsert({
+          id: position.id,
+          data: position,
+          updated_at: new Date().toISOString()
+        });
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase upsertFoPosition fallback:", e.message);
+    }
+  },
+
+  deleteFoPosition: async (id) => {
+    if (!supabase || !id) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_fo_positions')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase deleteFoPosition fallback:", e.message);
+    }
+  },
+
+  clearFoPositions: async () => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_fo_positions')
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase clearFoPositions fallback:", e.message);
+    }
+  },
+
+  // 9. F&O Trade History
+  getFoHistory: async () => {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('financebro_fo_history')
+        .select('*')
+        .order('timestamp', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(r => (r.data ? { ...r.data, id: r.id } : r));
+    } catch (e) {
+      console.warn("Supabase getFoHistory fallback:", e.message);
+      return null;
+    }
+  },
+
+  insertFoTrade: async (trade) => {
+    if (!supabase || !trade?.id) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_fo_history')
+        .insert([{
+          id: trade.id,
+          data: trade,
+          timestamp: new Date().toISOString(),
+          realized_pnl: trade.realizedPnl || 0
+        }]);
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase insertFoTrade fallback:", e.message);
+    }
+  },
+
+  clearFoHistory: async () => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase
+        .from('financebro_fo_history')
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+    } catch (e) {
+      console.warn("Supabase clearFoHistory fallback:", e.message);
+    }
+  },
+
+  // 10. Live Cross-Device Realtime Subscription
+  subscribeToChanges: (callback) => {
+    if (!supabase) return null;
+    try {
+      const channel = supabase
+        .channel('financebro_live_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_portfolio' }, (payload) => {
+          callback('portfolio', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_positions' }, (payload) => {
+          callback('positions', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_trades' }, (payload) => {
+          callback('trades', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_rules' }, (payload) => {
+          callback('rules', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_fo_positions' }, (payload) => {
+          callback('fo_positions', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'financebro_fo_history' }, (payload) => {
+          callback('fo_history', payload);
+        })
+        .subscribe();
+      return channel;
+    } catch (e) {
+      console.warn("Supabase Realtime subscription error:", e);
       return null;
     }
   }
